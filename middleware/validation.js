@@ -79,10 +79,50 @@ const ideationValidation = {
       .trim()
       .isLength({ min: 20, max: 2000 })
       .withMessage('Description must be between 20 and 2000 characters'),
-    body('category')
+    body('projectDetails')
+      .trim()
+      .isLength({ min: 50, max: 5000 })
+      .withMessage('Project details must be between 50 and 5000 characters'),
+    body('industry')
       .trim()
       .notEmpty()
-      .withMessage('Category is required'),
+      .withMessage('Industry is required'),
+    body('stage')
+      .trim()
+      .notEmpty()
+      .withMessage('Stage is required'),
+    body('teamMembers')
+      .optional()
+      .isArray({ max: 3 })
+      .withMessage('Maximum 3 team members allowed'),
+    body('teamMembers.*.name')
+      .optional()
+      .trim()
+      .isLength({ min: 2, max: 100 })
+      .withMessage('Team member name must be between 2 and 100 characters'),
+    body('teamMembers.*.position')
+      .optional()
+      .trim()
+      .isLength({ min: 2, max: 100 })
+      .withMessage('Team member position must be between 2 and 100 characters'),
+    body('teamMembers.*.skills')
+      .optional()
+      .isArray()
+      .withMessage('Skills must be an array'),
+    body('teamMembers.*.skills.*')
+      .optional()
+      .trim()
+      .isLength({ min: 2, max: 50 })
+      .withMessage('Each skill must be between 2 and 50 characters'),
+    body('tags')
+      .optional()
+      .isArray()
+      .withMessage('Tags must be an array'),
+    body('tags.*')
+      .optional()
+      .trim()
+      .isLength({ min: 2, max: 50 })
+      .withMessage('Each tag must be between 2 and 50 characters'),
     handleValidationErrors
   ],
   
@@ -133,14 +173,31 @@ const knowledgeValidation = {
       .trim()
       .isLength({ min: 5, max: 200 })
       .withMessage('Title must be between 5 and 200 characters'),
-    body('description')
+    body('titleDescription')
       .trim()
-      .isLength({ min: 20, max: 2000 })
-      .withMessage('Description must be between 20 and 2000 characters'),
+      .isLength({ min: 10, max: 500 })
+      .withMessage('Title description must be between 10 and 500 characters'),
+    body('contentPreview')
+      .trim()
+      .isLength({ min: 20, max: 1000 })
+      .withMessage('Content preview must be between 20 and 1000 characters'),
     body('category')
       .trim()
       .notEmpty()
       .withMessage('Category is required'),
+    body('tags')
+      .optional()
+      .isArray()
+      .withMessage('Tags must be an array'),
+    body('tags.*')
+      .optional()
+      .trim()
+      .isLength({ min: 2, max: 50 })
+      .withMessage('Each tag must be between 2 and 50 characters'),
+    body('fileUrl')
+      .optional()
+      .isURL()
+      .withMessage('File URL must be a valid URL'),
     handleValidationErrors
   ]
 };

@@ -38,8 +38,17 @@ router.get('/', optionalAuth, (req, res) => {
       filteredIdeas = filteredIdeas.filter(idea => 
         idea.title.toLowerCase().includes(searchLower) ||
         idea.description.toLowerCase().includes(searchLower) ||
+        idea.projectDetails.toLowerCase().includes(searchLower) ||
+        idea.industry.toLowerCase().includes(searchLower) ||
+        idea.stage.toLowerCase().includes(searchLower) ||
         idea.creator.firstName.toLowerCase().includes(searchLower) ||
-        idea.creator.lastName.toLowerCase().includes(searchLower)
+        idea.creator.lastName.toLowerCase().includes(searchLower) ||
+        idea.tags.some(tag => tag.toLowerCase().includes(searchLower)) ||
+        idea.teamMembers.some(member => 
+          member.name.toLowerCase().includes(searchLower) ||
+          member.position.toLowerCase().includes(searchLower) ||
+          member.skills.some(skill => skill.toLowerCase().includes(searchLower))
+        )
       );
     }
 
@@ -102,13 +111,16 @@ router.get('/', optionalAuth, (req, res) => {
 router.post('/', authenticateToken, ideationValidation.createIdea, (req, res) => {
   try {
     const { userId, firstName, lastName } = req.user;
-    const { title, description, category, tags = [] } = req.body;
+    const { title, description, projectDetails, industry, stage, teamMembers = [], tags = [] } = req.body;
 
     const newIdea = {
       id: Date.now().toString(),
       title,
       description,
-      category,
+      projectDetails,
+      industry,
+      stage,
+      teamMembers: Array.isArray(teamMembers) ? teamMembers.slice(0, 3) : [],
       tags: Array.isArray(tags) ? tags : [],
       creator: {
         id: userId,
@@ -189,7 +201,7 @@ router.put('/:id', authenticateToken, ideationValidation.createIdea, (req, res) 
   try {
     const { id } = req.params;
     const { userId } = req.user;
-    const { title, description, category, tags } = req.body;
+    const { title, description, projectDetails, industry, stage, teamMembers, tags } = req.body;
 
     const idea = ideas.find(i => i.id === id);
     if (!idea) {
@@ -210,7 +222,10 @@ router.put('/:id', authenticateToken, ideationValidation.createIdea, (req, res) 
     // Update idea
     idea.title = title;
     idea.description = description;
-    idea.category = category;
+    idea.projectDetails = projectDetails;
+    idea.industry = industry;
+    idea.stage = stage;
+    idea.teamMembers = Array.isArray(teamMembers) ? teamMembers.slice(0, 3) : [];
     idea.tags = Array.isArray(tags) ? tags : [];
     idea.updatedAt = new Date().toISOString();
 
@@ -530,6 +545,181 @@ router.put('/:id/suggestions/:suggestionId', authenticateToken, (req, res) => {
     res.status(500).json({
       error: 'Update Failed',
       message: 'Failed to update suggestion status'
+    });
+  }
+});
+
+/**
+ * @route   GET /api/ideation/industries
+ * @desc    Get predefined industries for dropdown
+ * @access  Public
+ */
+router.get('/industries', (req, res) => {
+  try {
+    const industries = [
+      'Technology',
+      'Healthcare',
+      'Finance',
+      'Education',
+      'E-commerce',
+      'Manufacturing',
+      'Real Estate',
+      'Transportation',
+      'Energy',
+      'Agriculture',
+      'Entertainment',
+      'Food & Beverage',
+      'Fashion',
+      'Sports',
+      'Travel & Tourism',
+      'Automotive',
+      'Aerospace',
+      'Telecommunications',
+      'Media & Advertising',
+      'Consulting',
+      'Legal Services',
+      'Construction',
+      'Retail',
+      'Logistics',
+      'Pharmaceuticals',
+      'Biotechnology',
+      'Renewable Energy',
+      'Cybersecurity',
+      'Artificial Intelligence',
+      'Blockchain',
+      'Gaming',
+      'Social Media',
+      'SaaS',
+      'IoT',
+      'Robotics'
+    ];
+    
+    res.json({
+      industries: industries.sort()
+    });
+
+  } catch (error) {
+    console.error('Get industries error:', error);
+    res.status(500).json({
+      error: 'Fetch Failed',
+      message: 'Failed to fetch industries'
+    });
+  }
+});
+
+/**
+ * @route   GET /api/ideation/stages
+ * @desc    Get predefined stages for dropdown
+ * @access  Public
+ */
+router.get('/stages', (req, res) => {
+  try {
+    const stages = [
+      'Idea',
+      'Concept',
+      'Prototype',
+      'MVP',
+      'Beta',
+      'Launch',
+      'Growth',
+      'Scale',
+      'Mature',
+      'Exit'
+    ];
+    
+    res.json({
+      stages: stages
+    });
+
+  } catch (error) {
+    console.error('Get stages error:', error);
+    res.status(500).json({
+      error: 'Fetch Failed',
+      message: 'Failed to fetch stages'
+    });
+  }
+});
+
+/**
+ * @route   GET /api/ideation/available-tags
+ * @desc    Get available tags for ideation
+ * @access  Public
+ */
+router.get('/available-tags', (req, res) => {
+  try {
+    const allTags = ideas.flatMap(idea => idea.tags || []);
+    const uniqueTags = [...new Set(allTags)];
+    
+    res.json({
+      tags: uniqueTags.sort()
+    });
+
+  } catch (error) {
+    console.error('Get available tags error:', error);
+    res.status(500).json({
+      error: 'Fetch Failed',
+      message: 'Failed to fetch available tags'
+    });
+  }
+});
+
+/**
+ * @route   GET /api/ideation/skills
+ * @desc    Get predefined skills for team members
+ * @access  Public
+ */
+router.get('/skills', (req, res) => {
+  try {
+    const skills = [
+      'Frontend Development',
+      'Backend Development',
+      'Full Stack Development',
+      'Mobile Development',
+      'UI/UX Design',
+      'Graphic Design',
+      'Product Management',
+      'Project Management',
+      'Marketing',
+      'Sales',
+      'Business Development',
+      'Data Science',
+      'Machine Learning',
+      'DevOps',
+      'Cloud Computing',
+      'Cybersecurity',
+      'Blockchain',
+      'AI/ML',
+      'Data Analytics',
+      'Quality Assurance',
+      'Content Writing',
+      'Digital Marketing',
+      'SEO',
+      'Social Media',
+      'Video Production',
+      'Photography',
+      'Finance',
+      'Accounting',
+      'Legal',
+      'Operations',
+      'Customer Success',
+      'Research',
+      'Strategy',
+      'Consulting',
+      'Training',
+      'Support',
+      'HR',
+      'Recruiting'
+    ];
+    
+    res.json({
+      skills: skills.sort()
+    });
+
+  } catch (error) {
+    console.error('Get skills error:', error);
+    res.status(500).json({
+      error: 'Fetch Failed',
+      message: 'Failed to fetch skills'
     });
   }
 });

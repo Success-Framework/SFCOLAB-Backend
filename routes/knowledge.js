@@ -39,9 +39,11 @@ router.get('/', optionalAuth, (req, res) => {
       const searchLower = search.toLowerCase();
       filteredResources = filteredResources.filter(resource => 
         resource.title.toLowerCase().includes(searchLower) ||
-        resource.description.toLowerCase().includes(searchLower) ||
+        resource.titleDescription.toLowerCase().includes(searchLower) ||
+        resource.contentPreview.toLowerCase().includes(searchLower) ||
         resource.author.firstName.toLowerCase().includes(searchLower) ||
-        resource.author.lastName.toLowerCase().includes(searchLower)
+        resource.author.lastName.toLowerCase().includes(searchLower) ||
+        resource.tags.some(tag => tag.toLowerCase().includes(searchLower))
       );
     }
 
@@ -104,12 +106,13 @@ router.get('/', optionalAuth, (req, res) => {
 router.post('/', authenticateToken, knowledgeValidation.addResource, (req, res) => {
   try {
     const { userId, firstName, lastName } = req.user;
-    const { title, description, category, fileUrl, tags = [] } = req.body;
+    const { title, titleDescription, contentPreview, category, fileUrl, tags = [] } = req.body;
 
     const newResource = {
       id: Date.now().toString(),
       title,
-      description,
+      titleDescription,
+      contentPreview,
       category,
       fileUrl: fileUrl || null,
       tags: Array.isArray(tags) ? tags : [],
@@ -204,7 +207,7 @@ router.put('/:id', authenticateToken, knowledgeValidation.addResource, (req, res
   try {
     const { id } = req.params;
     const { userId } = req.user;
-    const { title, description, category, fileUrl, tags } = req.body;
+    const { title, titleDescription, contentPreview, category, fileUrl, tags } = req.body;
 
     const resource = knowledgeResources.find(r => r.id === id);
     if (!resource) {
@@ -224,7 +227,8 @@ router.put('/:id', authenticateToken, knowledgeValidation.addResource, (req, res
 
     // Update resource
     resource.title = title;
-    resource.description = description;
+    resource.titleDescription = titleDescription;
+    resource.contentPreview = contentPreview;
     resource.category = category;
     resource.fileUrl = fileUrl || resource.fileUrl;
     resource.tags = Array.isArray(tags) ? tags : [];
@@ -561,6 +565,124 @@ router.get('/categories', (req, res) => {
     res.status(500).json({
       error: 'Fetch Failed',
       message: 'Failed to fetch categories'
+    });
+  }
+});
+
+/**
+ * @route   GET /api/knowledge/predefined-categories
+ * @desc    Get predefined categories for dropdown
+ * @access  Public
+ */
+router.get('/predefined-categories', (req, res) => {
+  try {
+    const predefinedCategories = [
+      'Technology',
+      'Business',
+      'Marketing',
+      'Design',
+      'Development',
+      'Finance',
+      'Healthcare',
+      'Education',
+      'Research',
+      'Innovation',
+      'Startup',
+      'Management',
+      'Sales',
+      'Operations',
+      'Strategy',
+      'Analytics',
+      'Data Science',
+      'AI/ML',
+      'Blockchain',
+      'Sustainability'
+    ];
+    
+    res.json({
+      categories: predefinedCategories
+    });
+
+  } catch (error) {
+    console.error('Get predefined categories error:', error);
+    res.status(500).json({
+      error: 'Fetch Failed',
+      message: 'Failed to fetch predefined categories'
+    });
+  }
+});
+
+/**
+ * @route   GET /api/knowledge/available-tags
+ * @desc    Get available tags for multiple selection
+ * @access  Public
+ */
+router.get('/available-tags', (req, res) => {
+  try {
+    const allTags = knowledgeResources.flatMap(r => r.tags || []);
+    const uniqueTags = [...new Set(allTags)];
+    
+    res.json({
+      tags: uniqueTags.sort()
+    });
+
+  } catch (error) {
+    console.error('Get available tags error:', error);
+    res.status(500).json({
+      error: 'Fetch Failed',
+      message: 'Failed to fetch available tags'
+    });
+  }
+});
+
+/**
+ * @route   POST /api/knowledge/upload
+ * @desc    Upload file for knowledge resource
+ * @access  Private
+ */
+router.post('/upload', authenticateToken, (req, res) => {
+  try {
+    // This is a placeholder for file upload functionality
+    // In a real implementation, you would use multer or similar middleware
+    // to handle file uploads and return the file URL
+    
+    const { fileName, fileType, fileSize } = req.body;
+    
+    // Validate file type and size
+    const allowedTypes = ['pdf', 'doc', 'docx', 'txt', 'md', 'jpg', 'jpeg', 'png', 'gif', 'mp4', 'avi', 'mov'];
+    const fileExtension = fileName.split('.').pop().toLowerCase();
+    
+    if (!allowedTypes.includes(fileExtension)) {
+      return res.status(400).json({
+        error: 'Invalid File Type',
+        message: 'File type not supported. Allowed types: ' + allowedTypes.join(', ')
+      });
+    }
+    
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (fileSize > maxSize) {
+      return res.status(400).json({
+        error: 'File Too Large',
+        message: 'File size must be less than 50MB'
+      });
+    }
+    
+    // Generate file URL (in real implementation, this would be the actual uploaded file URL)
+    const fileUrl = `/uploads/knowledge/${Date.now()}-${fileName}`;
+    
+    res.json({
+      message: 'File upload successful',
+      fileUrl,
+      fileName,
+      fileType: fileExtension,
+      fileSize
+    });
+
+  } catch (error) {
+    console.error('File upload error:', error);
+    res.status(500).json({
+      error: 'Upload Failed',
+      message: 'Failed to upload file'
     });
   }
 });
