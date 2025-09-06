@@ -4,7 +4,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
-const { router: authRoutes } = require('./routes/auth');
+const { initializeData } = require('./utils/dataPersistence');
+const authRoutes = require('./routes/auth');
 const ideationRoutes = require('./routes/ideation');
 const startupRoutes = require('./routes/startup');
 const knowledgeRoutes = require('./routes/knowledge');
@@ -92,11 +93,15 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Initialize data persistence
+initializeData();
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 SFCollab Backend server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  console.log(`💾 Data persistence: JSON file storage initialized`);
 });
 
 module.exports = app;

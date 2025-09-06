@@ -4,12 +4,15 @@ const { authenticateToken, authenticateRefreshToken } = require('../middleware/a
 const { authValidation } = require('../middleware/validation');
 const { generateTokens } = require('../utils/jwt');
 const { hashPassword, comparePassword } = require('../utils/password');
+const { 
+  getCollection, 
+  addToCollection, 
+  updateItemInCollection, 
+  findInCollection,
+  updateCollection 
+} = require('../utils/dataPersistence');
 
 const router = express.Router();
-
-// Mock user data (replace with database operations later)
-let users = [];
-let refreshTokens = [];
 
 /**
  * @route   POST /api/auth/signup
@@ -21,7 +24,7 @@ router.post('/signup', authValidation.signup, async (req, res) => {
     const { firstName, lastName, email, password } = req.body;
 
     // Check if user already exists
-    const existingUser = users.find(user => user.email === email);
+    const existingUser = findInCollection('users', user => user.email === email);
     if (existingUser) {
       return res.status(400).json({
         error: 'User Already Exists',
@@ -50,7 +53,8 @@ router.post('/signup', authValidation.signup, async (req, res) => {
       }
     };
 
-    users.push(newUser);
+    // Add user to collection
+    addToCollection('users', newUser);
 
     // Generate tokens
     const tokens = generateTokens({
@@ -61,7 +65,7 @@ router.post('/signup', authValidation.signup, async (req, res) => {
     });
 
     // Store refresh token
-    refreshTokens.push({
+    addToCollection('refreshTokens', {
       userId: newUser.id,
       token: tokens.refreshToken,
       createdAt: new Date().toISOString()
@@ -95,7 +99,7 @@ router.post('/login', authValidation.login, async (req, res) => {
     const { email, password } = req.body;
 
     // Find user by email
-    const user = users.find(u => u.email === email);
+    const user = findInCollection('users', u => u.email === email);
     if (!user) {
       return res.status(401).json({
         error: 'Invalid Credentials',
@@ -121,7 +125,7 @@ router.post('/login', authValidation.login, async (req, res) => {
     });
 
     // Store refresh token
-    refreshTokens.push({
+    addToCollection('refreshTokens', {
       userId: user.id,
       token: tokens.refreshToken,
       createdAt: new Date().toISOString()
@@ -155,7 +159,7 @@ router.post('/refresh', authenticateRefreshToken, (req, res) => {
     const { userId } = req.user;
 
     // Find user
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -172,6 +176,7 @@ router.post('/refresh', authenticateRefreshToken, (req, res) => {
     });
 
     // Update refresh token
+    const refreshTokens = getCollection('refreshTokens');
     const tokenIndex = refreshTokens.findIndex(rt => rt.userId === userId);
     if (tokenIndex !== -1) {
       refreshTokens[tokenIndex] = {
@@ -179,6 +184,7 @@ router.post('/refresh', authenticateRefreshToken, (req, res) => {
         token: tokens.refreshToken,
         createdAt: new Date().toISOString()
       };
+      updateCollection('refreshTokens', refreshTokens);
     }
 
     res.json({
@@ -205,7 +211,9 @@ router.post('/logout', authenticateToken, (req, res) => {
     const { userId } = req.user;
 
     // Remove refresh token
-    refreshTokens = refreshTokens.filter(rt => rt.userId !== userId);
+    const refreshTokens = getCollection('refreshTokens');
+    const filteredTokens = refreshTokens.filter(rt => rt.userId !== userId);
+    updateCollection('refreshTokens', filteredTokens);
 
     res.json({
       message: 'Logout successful'
@@ -230,7 +238,9 @@ router.post('/logout-all', authenticateToken, (req, res) => {
     const { userId } = req.user;
 
     // Remove all refresh tokens for this user
-    refreshTokens = refreshTokens.filter(rt => rt.userId !== userId);
+    const refreshTokens = getCollection('refreshTokens');
+    const filteredTokens = refreshTokens.filter(rt => rt.userId !== userId);
+    updateCollection('refreshTokens', filteredTokens);
 
     res.json({
       message: 'Logged out from all devices successfully'
@@ -254,7 +264,7 @@ router.get('/me', authenticateToken, (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -288,7 +298,7 @@ router.post('/change-password', authenticateToken, authValidation.changePassword
     const { userId } = req.user;
     const { currentPassword, newPassword } = req.body;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -309,11 +319,15 @@ router.post('/change-password', authenticateToken, authValidation.changePassword
     const hashedNewPassword = await hashPassword(newPassword);
 
     // Update password
-    user.password = hashedNewPassword;
-    user.updatedAt = new Date().toISOString();
+    updateItemInCollection('users', userId, {
+      password: hashedNewPassword,
+      updatedAt: new Date().toISOString()
+    });
 
     // Remove refresh tokens (force re-login)
-    refreshTokens = refreshTokens.filter(rt => rt.userId !== userId);
+    const refreshTokens = getCollection('refreshTokens');
+    const filteredTokens = refreshTokens.filter(rt => rt.userId !== userId);
+    updateCollection('refreshTokens', filteredTokens);
 
     res.json({
       message: 'Password changed successfully. Please login again.'
@@ -361,8 +375,4 @@ router.get('/google/callback',
   }
 );
 
-module.exports = {
-  router,
-  users,
-  refreshTokens
-};
+module.exports = router;

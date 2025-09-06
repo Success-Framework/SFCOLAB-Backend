@@ -1,13 +1,17 @@
 const express = require('express');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
 const { ideationValidation } = require('../middleware/validation');
+const { 
+  getCollection, 
+  addToCollection, 
+  updateItemInCollection, 
+  deleteFromCollection,
+  findInCollection,
+  filterCollection,
+  updateCollection
+} = require('../utils/dataPersistence');
 
 const router = express.Router();
-
-// Mock data (replace with database operations later)
-let ideas = [];
-let comments = [];
-let suggestions = [];
 
 /**
  * @route   GET /api/ideation
@@ -25,7 +29,7 @@ router.get('/', optionalAuth, (req, res) => {
       sortOrder = 'desc' 
     } = req.query;
 
-    let filteredIdeas = [...ideas];
+    let filteredIdeas = [...getCollection('ideas')];
 
     // Filter by category
     if (category) {
@@ -134,7 +138,7 @@ router.post('/', authenticateToken, ideationValidation.createIdea, (req, res) =>
       updatedAt: new Date().toISOString()
     };
 
-    ideas.push(newIdea);
+    addToCollection('ideas', newIdea);
 
     res.status(201).json({
       message: 'Idea created successfully',
@@ -160,7 +164,7 @@ router.get('/:id', optionalAuth, (req, res) => {
     const { id } = req.params;
     const { userId } = req.user || {};
 
-    const idea = ideas.find(i => i.id === id);
+    const idea = findInCollection('ideas', i => i.id === id);
     if (!idea) {
       return res.status(404).json({
         error: 'Idea Not Found',
@@ -171,10 +175,11 @@ router.get('/:id', optionalAuth, (req, res) => {
     // Increment view count if user is authenticated
     if (userId && userId !== idea.creator.id) {
       idea.views += 1;
+      updateItemInCollection('ideas', id, { views: idea.views });
     }
 
     // Get comments for this idea
-    const ideaComments = comments.filter(c => c.ideaId === id);
+    const ideaComments = filterCollection('comments', c => c.ideaId === id);
 
     res.json({
       idea: {
@@ -203,7 +208,7 @@ router.put('/:id', authenticateToken, ideationValidation.createIdea, (req, res) 
     const { userId } = req.user;
     const { title, description, projectDetails, industry, stage, teamMembers, tags } = req.body;
 
-    const idea = ideas.find(i => i.id === id);
+    const idea = findInCollection('ideas', i => i.id === id);
     if (!idea) {
       return res.status(404).json({
         error: 'Idea Not Found',
@@ -220,18 +225,23 @@ router.put('/:id', authenticateToken, ideationValidation.createIdea, (req, res) 
     }
 
     // Update idea
-    idea.title = title;
-    idea.description = description;
-    idea.projectDetails = projectDetails;
-    idea.industry = industry;
-    idea.stage = stage;
-    idea.teamMembers = Array.isArray(teamMembers) ? teamMembers.slice(0, 3) : [];
-    idea.tags = Array.isArray(tags) ? tags : [];
-    idea.updatedAt = new Date().toISOString();
+    const updatedIdea = {
+      ...idea,
+      title,
+      description,
+      projectDetails,
+      industry,
+      stage,
+      teamMembers: Array.isArray(teamMembers) ? teamMembers.slice(0, 3) : [],
+      tags: Array.isArray(tags) ? tags : [],
+      updatedAt: new Date().toISOString()
+    };
+
+    updateItemInCollection('ideas', id, updatedIdea);
 
     res.json({
       message: 'Idea updated successfully',
-      idea
+      idea: updatedIdea
     });
 
   } catch (error) {
@@ -253,15 +263,13 @@ router.delete('/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
     const { userId } = req.user;
 
-    const ideaIndex = ideas.findIndex(i => i.id === id);
-    if (ideaIndex === -1) {
+    const idea = findInCollection('ideas', i => i.id === id);
+    if (!idea) {
       return res.status(404).json({
         error: 'Idea Not Found',
         message: 'Idea not found'
       });
     }
-
-    const idea = ideas[ideaIndex];
 
     // Check if user is the creator
     if (idea.creator.id !== userId) {
@@ -272,10 +280,12 @@ router.delete('/:id', authenticateToken, (req, res) => {
     }
 
     // Delete idea
-    ideas.splice(ideaIndex, 1);
+    deleteFromCollection('ideas', id);
 
     // Delete associated comments
-    comments = comments.filter(c => c.ideaId !== id);
+    const comments = getCollection('comments');
+    const filteredComments = comments.filter(c => c.ideaId !== id);
+    updateCollection('comments', filteredComments);
 
     res.json({
       message: 'Idea deleted successfully'
@@ -301,7 +311,7 @@ router.post('/:id/comments', authenticateToken, ideationValidation.createComment
     const { userId, firstName, lastName } = req.user;
     const { content } = req.body;
 
-    const idea = ideas.find(i => i.id === id);
+    const idea = findInCollection('ideas', i => i.id === id);
     if (!idea) {
       return res.status(404).json({
         error: 'Idea Not Found',
@@ -322,7 +332,7 @@ router.post('/:id/comments', authenticateToken, ideationValidation.createComment
       updatedAt: new Date().toISOString()
     };
 
-    comments.push(newComment);
+    addToCollection('comments', newComment);
 
     res.status(201).json({
       message: 'Comment added successfully',
@@ -348,7 +358,7 @@ router.get('/:id/comments', (req, res) => {
     const { id } = req.params;
     const { page = 1, limit = 20 } = req.query;
 
-    const idea = ideas.find(i => i.id === id);
+    const idea = findInCollection('ideas', i => i.id === id);
     if (!idea) {
       return res.status(404).json({
         error: 'Idea Not Found',
@@ -356,7 +366,7 @@ router.get('/:id/comments', (req, res) => {
       });
     }
 
-    const ideaComments = comments.filter(c => c.ideaId === id);
+    const ideaComments = filterCollection('comments', c => c.ideaId === id);
 
     // Pagination
     const startIndex = (page - 1) * limit;
@@ -397,7 +407,7 @@ router.post('/:id/suggestions', authenticateToken, ideationValidation.createComm
     const { userId, firstName, lastName } = req.user;
     const { content } = req.body;
 
-    const idea = ideas.find(i => i.id === id);
+    const idea = findInCollection('ideas', i => i.id === id);
     if (!idea) {
       return res.status(404).json({
         error: 'Idea Not Found',
@@ -427,7 +437,7 @@ router.post('/:id/suggestions', authenticateToken, ideationValidation.createComm
       updatedAt: new Date().toISOString()
     };
 
-    suggestions.push(newSuggestion);
+    addToCollection('suggestions', newSuggestion);
 
     // TODO: Send notification to idea creator
     // This will be implemented when notifications are set up
@@ -456,7 +466,7 @@ router.get('/:id/suggestions', authenticateToken, (req, res) => {
     const { id } = req.params;
     const { userId } = req.user;
 
-    const idea = ideas.find(i => i.id === id);
+    const idea = findInCollection('ideas', i => i.id === id);
     if (!idea) {
       return res.status(404).json({
         error: 'Idea Not Found',
@@ -472,7 +482,7 @@ router.get('/:id/suggestions', authenticateToken, (req, res) => {
       });
     }
 
-    const ideaSuggestions = suggestions.filter(s => s.ideaId === id);
+    const ideaSuggestions = filterCollection('suggestions', s => s.ideaId === id);
 
     res.json({
       suggestions: ideaSuggestions
@@ -505,7 +515,7 @@ router.put('/:id/suggestions/:suggestionId', authenticateToken, (req, res) => {
       });
     }
 
-    const idea = ideas.find(i => i.id === id);
+    const idea = findInCollection('ideas', i => i.id === id);
     if (!idea) {
       return res.status(404).json({
         error: 'Idea Not Found',
@@ -521,7 +531,7 @@ router.put('/:id/suggestions/:suggestionId', authenticateToken, (req, res) => {
       });
     }
 
-    const suggestion = suggestions.find(s => s.id === suggestionId && s.ideaId === id);
+    const suggestion = findInCollection('suggestions', s => s.id === suggestionId && s.ideaId === id);
     if (!suggestion) {
       return res.status(404).json({
         error: 'Suggestion Not Found',
@@ -529,15 +539,20 @@ router.put('/:id/suggestions/:suggestionId', authenticateToken, (req, res) => {
       });
     }
 
-    suggestion.status = status;
-    suggestion.updatedAt = new Date().toISOString();
+    const updatedSuggestion = {
+      ...suggestion,
+      status,
+      updatedAt: new Date().toISOString()
+    };
+
+    updateItemInCollection('suggestions', suggestionId, updatedSuggestion);
 
     // TODO: Send notification to suggestion author
     // This will be implemented when notifications are set up
 
     res.json({
       message: `Suggestion ${status} successfully`,
-      suggestion
+      suggestion: updatedSuggestion
     });
 
   } catch (error) {
@@ -647,6 +662,7 @@ router.get('/stages', (req, res) => {
  */
 router.get('/available-tags', (req, res) => {
   try {
+    const ideas = getCollection('ideas');
     const allTags = ideas.flatMap(idea => idea.tags || []);
     const uniqueTags = [...new Set(allTags)];
     

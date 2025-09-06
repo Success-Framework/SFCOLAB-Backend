@@ -1,0 +1,147 @@
+{
+  "users": [
+    {
+      "id": "test-user-1",
+      "firstName": "John",
+      "lastName": "Doe",
+      "email": "john.doe@example.com",
+      "password": "hashedpassword123",
+      "createdAt": "2025-09-06T18:43:46.407Z",
+      "updatedAt": "2025-09-06T18:43:46.416Z",
+      "isEmailVerified": false,
+      "profile": {
+        "picture": null,
+        "bio": "Updated bio for testing persistence",
+        "company": "Test Company",
+        "socialLinks": {}
+      }
+    },
+    {
+      "id": "1757189488116",
+      "firstName": "Test",
+      "lastName": "User",
+      "email": "test@example.com",
+      "password": "$2a$12$0lA4ZTHOvMjQdSiyGuz6OOa1rVksERoDMSOU9kL6nS6bO0pgDyCYu",
+      "createdAt": "2025-09-06T20:11:28.116Z",
+      "updatedAt": "2025-09-06T20:11:28.116Z",
+      "isEmailVerified": false,
+      "profile": {
+        "picture": null,
+        "bio": null,
+        "company": null,
+        "socialLinks": {}
+      }
+    },
+    {
+      "id": "1757189832115",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "email": "jane.smith@example.com",
+      "password": "$2a$12$QuDzB4.3tydC/kCwJ4E2Ieda2YJ9cAttHY.npI/XxlfVDh4fAHTaq",
+      "createdAt": "2025-09-06T20:17:12.115Z",
+      "updatedAt": "2025-09-06T20:17:12.115Z",
+      "isEmailVerified": false,
+      "profile": {
+        "picture": null,
+        "bio": null,
+        "company": null,
+        "socialLinks": {}
+      }
+    },
+    {
+      "id": "1757189833090",
+      "firstName": "Mike",
+      "lastName": "Johnson",
+      "email": "mike.johnson@example.com",
+      "password": "$2a$12$1jfRQv7ZvX9MKxOKlDjaAur4dqYuXFFAxxQAiSny1ZEwGkC0z7/HK",
+      "createdAt": "2025-09-06T20:17:13.090Z",
+      "updatedAt": "2025-09-06T20:17:13.090Z",
+      "isEmailVerified": false,
+      "profile": {
+        "picture": null,
+        "bio": null,
+        "company": null,
+        "socialLinks": {}
+      }
+    }
+  ],
+  "refreshTokens": [
+    {
+      "userId": "1757189488116",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzU3MTg5NDg4MTE2IiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZmlyc3ROYW1lIjoiVGVzdCIsImxhc3ROYW1lIjoiVXNlciIsImlhdCI6MTc1NzE4OTQ4OCwiZXhwIjoxNzU3Nzk0Mjg4fQ.3eLkXDHu5618lQpZTAj8NCIdyxCx16JOyYHcqLeL4jE",
+      "createdAt": "2025-09-06T20:11:28.122Z"
+    },
+    {
+      "userId": "1757189488116",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzU3MTg5NDg4MTE2IiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZmlyc3ROYW1lIjoiVGVzdCIsImxhc3ROYW1lIjoiVXNlciIsImlhdCI6MTc1NzE4OTQ4OCwiZXhwIjoxNzU3Nzk0Mjg4fQ.3eLkXDHu5618lQpZTAj8NCIdyxCx16JOyYHcqLeL4jE",
+      "createdAt": "2025-09-06T20:11:28.526Z"
+    },
+    {
+      "userId": "1757189832115",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzU3MTg5ODMyMTE1IiwiZW1haWwiOiJqYW5lLnNtaXRoQGV4YW1wbGUuY29tIiwiZmlyc3ROYW1lIjoiSmFuZSIsImxhc3ROYW1lIjoiU21pdGgiLCJpYXQiOjE3NTcxODk4MzIsImV4cCI6MTc1Nzc5NDYzMn0.cty9FRfYCeW4FEZUg7uA1wvq2ojv04jiKwYIfhhrG1s",
+      "createdAt": "2025-09-06T20:17:12.117Z"
+    },
+    {
+      "userId": "1757189833090",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzU3MTg5ODMzMDkwIiwiZW1haWwiOiJtaWtlLmpvaG5zb25AZXhhbXBsZS5jb20iLCJmaXJzdE5hbWUiOiJNaWtlIiwibGFzdE5hbWUiOiJKb2huc29uIiwiaWF0IjoxNzU3MTg5ODMzLCJleHAiOjE3NTc3OTQ2MzN9.Fn7WD3TXT1NFBWsn9q9da3---rpBkfg2Qk-kwH7t_Mo",
+      "createdAt": "2025-09-06T20:17:13.092Z"
+    },
+    {
+      "userId": "1757189488116",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzU3MTg5NDg4MTE2IiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZmlyc3ROYW1lIjoiVGVzdCIsImxhc3ROYW1lIjoiVXNlciIsImlhdCI6MTc1NzE5MDAzMiwiZXhwIjoxNzU3Nzk0ODMyfQ.IptEtBts2kaXNcOu8f9Bpd3b5-W3hQihmIolC3hmGuY",
+      "createdAt": "2025-09-06T20:20:32.922Z"
+    }
+  ],
+  "ideas": [
+    {
+      "id": "1757190032932",
+      "title": "AI-Powered Learning Platform",
+      "description": "An intelligent learning platform that adapts to individual learning styles and pace",
+      "projectDetails": "This platform will use machine learning algorithms to analyze student performance and create personalized learning paths. It will include features like adaptive quizzes, interactive content, and real-time progress tracking.",
+      "industry": "Education",
+      "stage": "Concept",
+      "teamMembers": [
+        {
+          "name": "Sarah Wilson",
+          "position": "AI Engineer",
+          "skills": [
+            "Machine Learning",
+            "Python",
+            "TensorFlow"
+          ]
+        }
+      ],
+      "tags": [
+        "AI",
+        "Education",
+        "Machine Learning",
+        "EdTech"
+      ],
+      "creator": {
+        "id": "1757189488116",
+        "firstName": "Test",
+        "lastName": "User"
+      },
+      "status": "active",
+      "likes": 0,
+      "views": 0,
+      "createdAt": "2025-09-06T20:20:32.932Z",
+      "updatedAt": "2025-09-06T20:20:32.932Z"
+    }
+  ],
+  "comments": [],
+  "suggestions": [],
+  "startups": [],
+  "joinRequests": [],
+  "knowledgeResources": [],
+  "knowledgeComments": [],
+  "resourceViews": [],
+  "resourceDownloads": [],
+  "resourceLikes": [],
+  "stories": [],
+  "posts": [],
+  "postLikes": [],
+  "postComments": [],
+  "notifications": [],
+  "lastUpdated": "2025-09-06T20:20:32.932Z"
+}
