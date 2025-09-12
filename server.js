@@ -18,12 +18,37 @@ const PORT = process.env.PORT || 3000;
 
 // Security middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://yourdomain.com'] 
-    : ['http://localhost:5173', 'http://localhost:5174'],
-  credentials: true
-}));
+
+// CORS with support for Referer-based allowance when Origin is missing
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? ['https://yourdomain.com']
+  : ['http://localhost:5173', 'http://localhost:5174'];
+
+const corsOptionsDelegate = (req, callback) => {
+  let requestOrigin = req.header('Origin');
+
+  if (!requestOrigin) {
+    const refererHeader = req.header('Referer') || req.header('Referrer');
+    if (refererHeader) {
+      try {
+        const refererUrl = new URL(refererHeader);
+        requestOrigin = `${refererUrl.protocol}//${refererUrl.host}`;
+      } catch (_) {
+        requestOrigin = null;
+      }
+    }
+  }
+
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    // Reflect the derived/received origin and allow credentials
+    callback(null, { origin: requestOrigin, credentials: true });
+  } else {
+    // Disable CORS for non-whitelisted origins but keep credentials flag consistent
+    callback(null, { origin: false, credentials: true });
+  }
+};
+
+app.use(cors(corsOptionsDelegate));
 
 // Rate limiting
 const limiter = rateLimit({
