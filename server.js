@@ -39,16 +39,23 @@ const corsOptionsDelegate = (req, callback) => {
     }
   }
 
+  const commonOptions = {
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    optionsSuccessStatus: 204
+  };
+
   if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
-    // Reflect the derived/received origin and allow credentials
-    callback(null, { origin: requestOrigin, credentials: true });
+    callback(null, { ...commonOptions, origin: requestOrigin });
   } else {
-    // Disable CORS for non-whitelisted origins but keep credentials flag consistent
-    callback(null, { origin: false, credentials: true });
+    callback(null, { ...commonOptions, origin: false });
   }
 };
 
 app.use(cors(corsOptionsDelegate));
+// Ensure preflight (OPTIONS) requests are handled for all routes
+app.options('*', cors(corsOptionsDelegate));
 
 // Rate limiting
 const limiter = rateLimit({
