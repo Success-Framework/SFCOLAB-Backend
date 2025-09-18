@@ -21,7 +21,7 @@ app.use(helmet());
 
 // CORS with support for Referer-based allowance when Origin is missing
 const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? ['https://yourdomain.com']
+  ? ['https://yourdomain.com'] // Add your frontend domain here
   : ['http://localhost:5173', 'http://localhost:5174'];
 
 const corsOptionsDelegate = (req, callback) => {
@@ -41,12 +41,15 @@ const corsOptionsDelegate = (req, callback) => {
 
   const commonOptions = {
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true,
     optionsSuccessStatus: 204
   };
 
-  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+  // In development, be more permissive
+  if (process.env.NODE_ENV !== 'production') {
+    callback(null, { ...commonOptions, origin: true });
+  } else if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
     callback(null, { ...commonOptions, origin: requestOrigin });
   } else {
     callback(null, { ...commonOptions, origin: false });
