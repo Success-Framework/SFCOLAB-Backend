@@ -16,12 +16,9 @@ const profileRoutes = require('./routes/profile');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Security middleware
-app.use(helmet());
-
 // CORS with support for Referer-based allowance when Origin is missing
 const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? ['https://yourdomain.com'] // Add your frontend domain here
+  ? ['https://yourdomain.com', 'http://localhost:5173'] // Add your frontend domain here
   : ['http://localhost:5173', 'http://localhost:5174'];
 
 const corsOptionsDelegate = (req, callback) => {
@@ -59,6 +56,11 @@ const corsOptionsDelegate = (req, callback) => {
 app.use(cors(corsOptionsDelegate));
 // Ensure preflight (OPTIONS) requests are handled for all routes
 app.options('*', cors(corsOptionsDelegate));
+
+// Security middleware
+app.use(helmet({
+  crossOriginResourcePolicy: false, // important for CORS
+}));
 
 // Rate limiting
 const limiter = rateLimit({
