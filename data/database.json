@@ -63,6 +63,22 @@
         "company": null,
         "socialLinks": {}
       }
+    },
+    {
+      "id": "1758305300713",
+      "firstName": "Jane",
+      "lastName": "Doe",
+      "email": "janedoe1195@gmail.com",
+      "password": "$2a$12$UyBD18D2wKfv0YgurYJnfOvAobTUm1Yl18iS599vac4X.993hySGW",
+      "createdAt": "2025-09-19T18:08:20.713Z",
+      "updatedAt": "2025-09-19T18:08:20.713Z",
+      "isEmailVerified": false,
+      "profile": {
+        "picture": null,
+        "bio": null,
+        "company": null,
+        "socialLinks": {}
+      }
     }
   ],
   "refreshTokens": [
@@ -90,6 +106,11 @@
       "userId": "1757189488116",
       "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzU3MTg5NDg4MTE2IiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZmlyc3ROYW1lIjoiVGVzdCIsImxhc3ROYW1lIjoiVXNlciIsImlhdCI6MTc1NzE5MDAzMiwiZXhwIjoxNzU3Nzk0ODMyfQ.IptEtBts2kaXNcOu8f9Bpd3b5-W3hQihmIolC3hmGuY",
       "createdAt": "2025-09-06T20:20:32.922Z"
+    },
+    {
+      "userId": "1758305300713",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxNzU4MzA1MzAwNzEzIiwiZW1haWwiOiJqYW5lZG9lMTE5NUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJKYW5lIiwibGFzdE5hbWUiOiJEb2UiLCJpYXQiOjE3NTgzMDUzMDAsImV4cCI6MTc1ODkxMDEwMH0.3wukpw2BmoNS-S5QEtPaVm-LQ-3vE9_umMZTiBYtm4g",
+      "createdAt": "2025-09-19T18:08:20.726Z"
     }
   ],
   "ideas": [
@@ -143,5 +164,5 @@
   "postLikes": [],
   "postComments": [],
   "notifications": [],
-  "lastUpdated": "2025-09-06T20:20:32.932Z"
+  "lastUpdated": "2025-09-19T18:08:20.727Z"
 }
