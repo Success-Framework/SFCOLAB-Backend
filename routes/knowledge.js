@@ -1,6 +1,6 @@
-const express = require('express');
-const { authenticateToken, optionalAuth } = require('../middleware/auth');
-const { knowledgeValidation } = require('../middleware/validation');
+const express = require("express");
+const { authenticateToken, optionalAuth } = require("../middleware/auth");
+const { knowledgeValidation } = require("../middleware/validation");
 
 const router = express.Router();
 
@@ -16,34 +16,37 @@ let resourceLikes = [];
  * @desc    Get all knowledge resources with pagination and filtering
  * @access  Public
  */
-router.get('/', optionalAuth, (req, res) => {
+router.get("/", optionalAuth, (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      category, 
-      search, 
-      sortBy = 'createdAt',
-      sortOrder = 'desc' 
+    const {
+      page = 1,
+      limit = 10,
+      category,
+      search,
+      sortBy = "createdAt",
+      sortOrder = "desc",
     } = req.query;
 
     let filteredResources = [...knowledgeResources];
 
     // Filter by category
     if (category) {
-      filteredResources = filteredResources.filter(resource => resource.category === category);
+      filteredResources = filteredResources.filter(
+        (resource) => resource.category === category
+      );
     }
 
     // Search functionality
     if (search) {
       const searchLower = search.toLowerCase();
-      filteredResources = filteredResources.filter(resource => 
-        resource.title.toLowerCase().includes(searchLower) ||
-        resource.titleDescription.toLowerCase().includes(searchLower) ||
-        resource.contentPreview.toLowerCase().includes(searchLower) ||
-        resource.author.firstName.toLowerCase().includes(searchLower) ||
-        resource.author.lastName.toLowerCase().includes(searchLower) ||
-        resource.tags.some(tag => tag.toLowerCase().includes(searchLower))
+      filteredResources = filteredResources.filter(
+        (resource) =>
+          resource.title.toLowerCase().includes(searchLower) ||
+          resource.titleDescription.toLowerCase().includes(searchLower) ||
+          resource.contentPreview.toLowerCase().includes(searchLower) ||
+          resource.author.firstName.toLowerCase().includes(searchLower) ||
+          resource.author.lastName.toLowerCase().includes(searchLower) ||
+          resource.tags.some((tag) => tag.toLowerCase().includes(searchLower))
       );
     }
 
@@ -52,17 +55,17 @@ router.get('/', optionalAuth, (req, res) => {
       let aValue = a[sortBy];
       let bValue = b[sortBy];
 
-      if (sortBy === 'author') {
+      if (sortBy === "author") {
         aValue = `${a.author.firstName} ${a.author.lastName}`;
         bValue = `${b.author.firstName} ${b.author.lastName}`;
       }
 
-      if (typeof aValue === 'string') {
+      if (typeof aValue === "string") {
         aValue = aValue.toLowerCase();
         bValue = bValue.toLowerCase();
       }
 
-      if (sortOrder === 'asc') {
+      if (sortOrder === "asc") {
         return aValue > bValue ? 1 : -1;
       } else {
         return aValue < bValue ? 1 : -1;
@@ -85,15 +88,14 @@ router.get('/', optionalAuth, (req, res) => {
         totalPages,
         totalResources,
         hasNextPage: endIndex < totalResources,
-        hasPrevPage: page > 1
-      }
+        hasPrevPage: page > 1,
+      },
     });
-
   } catch (error) {
-    console.error('Get knowledge resources error:', error);
+    console.error("Get knowledge resources error:", error);
     res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch knowledge resources'
+      error: "Fetch Failed",
+      message: "Failed to fetch knowledge resources",
     });
   }
 });
@@ -103,468 +105,76 @@ router.get('/', optionalAuth, (req, res) => {
  * @desc    Add new knowledge resource
  * @access  Private
  */
-router.post('/', authenticateToken, knowledgeValidation.addResource, (req, res) => {
-  try {
-    const { userId, firstName, lastName } = req.user;
-    const { title, titleDescription, contentPreview, category, fileUrl, tags = [] } = req.body;
+router.post(
+  "/",
+  authenticateToken,
+  knowledgeValidation.addResource,
+  (req, res) => {
+    try {
+      const { userId, firstName, lastName } = req.user;
+      const {
+        title,
+        titleDescription,
+        contentPreview,
+        category,
+        fileUrl,
+        tags = [],
+      } = req.body;
 
-    const newResource = {
-      id: Date.now().toString(),
-      title,
-      titleDescription,
-      contentPreview,
-      category,
-      fileUrl: fileUrl || null,
-      tags: Array.isArray(tags) ? tags : [],
-      author: {
-        id: userId,
-        firstName,
-        lastName
-      },
-      status: 'active',
-      views: 0,
-      downloads: 0,
-      likes: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    knowledgeResources.push(newResource);
-
-    res.status(201).json({
-      message: 'Knowledge resource added successfully',
-      resource: newResource
-    });
-
-  } catch (error) {
-    console.error('Add knowledge resource error:', error);
-    res.status(500).json({
-      error: 'Creation Failed',
-      message: 'Failed to add knowledge resource'
-    });
-  }
-});
-
-/**
- * @route   GET /api/knowledge/:id
- * @desc    Get knowledge resource by ID with comments
- * @access  Public
- */
-router.get('/:id', optionalAuth, (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId } = req.user || {};
-
-    const resource = knowledgeResources.find(r => r.id === id);
-    if (!resource) {
-      return res.status(404).json({
-        error: 'Resource Not Found',
-        message: 'Knowledge resource not found'
-      });
-    }
-
-    // Increment view count if user is authenticated
-    if (userId && userId !== resource.author.id) {
-      resource.views += 1;
-      
-      // Track view
-      const existingView = resourceViews.find(v => v.resourceId === id && v.userId === userId);
-      if (!existingView) {
-        resourceViews.push({
-          id: Date.now().toString(),
-          resourceId: id,
-          userId,
-          viewedAt: new Date().toISOString()
-        });
-      }
-    }
-
-    // Get comments for this resource
-    const resourceComments = knowledgeComments.filter(c => c.resourceId === id);
-
-    res.json({
-      resource: {
-        ...resource,
-        comments: resourceComments
-      }
-    });
-
-  } catch (error) {
-    console.error('Get knowledge resource error:', error);
-    res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch knowledge resource'
-    });
-  }
-});
-
-/**
- * @route   PUT /api/knowledge/:id
- * @desc    Update knowledge resource (only author can update)
- * @access  Private
- */
-router.put('/:id', authenticateToken, knowledgeValidation.addResource, (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId } = req.user;
-    const { title, titleDescription, contentPreview, category, fileUrl, tags } = req.body;
-
-    const resource = knowledgeResources.find(r => r.id === id);
-    if (!resource) {
-      return res.status(404).json({
-        error: 'Resource Not Found',
-        message: 'Knowledge resource not found'
-      });
-    }
-
-    // Check if user is the author
-    if (resource.author.id !== userId) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'You can only update your own knowledge resources'
-      });
-    }
-
-    // Update resource
-    resource.title = title;
-    resource.titleDescription = titleDescription;
-    resource.contentPreview = contentPreview;
-    resource.category = category;
-    resource.fileUrl = fileUrl || resource.fileUrl;
-    resource.tags = Array.isArray(tags) ? tags : [];
-    resource.updatedAt = new Date().toISOString();
-
-    res.json({
-      message: 'Knowledge resource updated successfully',
-      resource
-    });
-
-  } catch (error) {
-    console.error('Update knowledge resource error:', error);
-    res.status(500).json({
-      error: 'Update Failed',
-      message: 'Failed to update knowledge resource'
-    });
-  }
-});
-
-/**
- * @route   DELETE /api/knowledge/:id
- * @desc    Delete knowledge resource (only author can delete)
- * @access  Private
- */
-router.delete('/:id', authenticateToken, (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId } = req.user;
-
-    const resourceIndex = knowledgeResources.findIndex(r => r.id === id);
-    if (resourceIndex === -1) {
-      return res.status(404).json({
-        error: 'Resource Not Found',
-        message: 'Knowledge resource not found'
-      });
-    }
-
-    const resource = knowledgeResources[resourceIndex];
-
-    // Check if user is the author
-    if (resource.author.id !== userId) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'You can only delete your own knowledge resources'
-      });
-    }
-
-    // Delete resource
-    knowledgeResources.splice(resourceIndex, 1);
-
-    // Delete associated data
-    knowledgeComments = knowledgeComments.filter(c => c.resourceId !== id);
-    resourceViews = resourceViews.filter(v => v.resourceId !== id);
-    resourceDownloads = resourceDownloads.filter(d => d.resourceId !== id);
-    resourceLikes = resourceLikes.filter(l => l.resourceId !== id);
-
-    res.json({
-      message: 'Knowledge resource deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Delete knowledge resource error:', error);
-    res.status(500).json({
-      error: 'Deletion Failed',
-      message: 'Failed to delete knowledge resource'
-    });
-  }
-});
-
-/**
- * @route   POST /api/knowledge/:id/comments
- * @desc    Add comment to knowledge resource
- * @access  Private
- */
-router.post('/:id/comments', authenticateToken, (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId, firstName, lastName } = req.user;
-    const { content } = req.body;
-
-    const resource = knowledgeResources.find(r => r.id === id);
-    if (!resource) {
-      return res.status(404).json({
-        error: 'Resource Not Found',
-        message: 'Knowledge resource not found'
-      });
-    }
-
-    const newComment = {
-      id: Date.now().toString(),
-      resourceId: id,
-      content,
-      author: {
-        id: userId,
-        firstName,
-        lastName
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    knowledgeComments.push(newComment);
-
-    res.status(201).json({
-      message: 'Comment added successfully',
-      comment: newComment
-    });
-
-  } catch (error) {
-    console.error('Add comment error:', error);
-    res.status(500).json({
-      error: 'Comment Failed',
-      message: 'Failed to add comment'
-    });
-  }
-});
-
-/**
- * @route   GET /api/knowledge/:id/comments
- * @desc    Get comments for a knowledge resource
- * @access  Public
- */
-router.get('/:id/comments', (req, res) => {
-  try {
-    const { id } = req.params;
-    const { page = 1, limit = 20 } = req.query;
-
-    const resource = knowledgeResources.find(r => r.id === id);
-    if (!resource) {
-      return res.status(404).json({
-        error: 'Resource Not Found',
-        message: 'Knowledge resource not found'
-      });
-    }
-
-    const resourceComments = knowledgeComments.filter(c => c.resourceId === id);
-
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const paginatedComments = resourceComments.slice(startIndex, endIndex);
-
-    const totalComments = resourceComments.length;
-    const totalPages = Math.ceil(totalComments / limit);
-
-    res.json({
-      comments: paginatedComments,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages,
-        totalComments,
-        hasNextPage: endIndex < totalComments,
-        hasPrevPage: page > 1
-      }
-    });
-
-  } catch (error) {
-    console.error('Get comments error:', error);
-    res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch comments'
-    });
-  }
-});
-
-/**
- * @route   POST /api/knowledge/:id/download
- * @desc    Track resource download
- * @access  Private
- */
-router.post('/:id/download', authenticateToken, (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId } = req.user;
-
-    const resource = knowledgeResources.find(r => r.id === id);
-    if (!resource) {
-      return res.status(404).json({
-        error: 'Resource Not Found',
-        message: 'Knowledge resource not found'
-      });
-    }
-
-    // Increment download count
-    resource.downloads += 1;
-
-    // Track download
-    const existingDownload = resourceDownloads.find(d => d.resourceId === id && d.userId === userId);
-    if (!existingDownload) {
-      resourceDownloads.push({
+      const newResource = {
         id: Date.now().toString(),
-        resourceId: id,
-        userId,
-        downloadedAt: new Date().toISOString()
-      });
-    }
-
-    res.json({
-      message: 'Download tracked successfully',
-      downloads: resource.downloads
-    });
-
-  } catch (error) {
-    console.error('Track download error:', error);
-    res.status(500).json({
-      error: 'Tracking Failed',
-      message: 'Failed to track download'
-    });
-  }
-});
-
-/**
- * @route   POST /api/knowledge/:id/like
- * @desc    Like/unlike knowledge resource
- * @access  Private
- */
-router.post('/:id/like', authenticateToken, (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId } = req.user;
-
-    const resource = knowledgeResources.find(r => r.id === id);
-    if (!resource) {
-      return res.status(404).json({
-        error: 'Resource Not Found',
-        message: 'Knowledge resource not found'
-      });
-    }
-
-    // Check if user already liked
-    const existingLike = resourceLikes.find(l => l.resourceId === id && l.userId === userId);
-
-    if (existingLike) {
-      // Unlike
-      resourceLikes = resourceLikes.filter(l => l.id !== existingLike.id);
-      resource.likes -= 1;
-      
-      res.json({
-        message: 'Resource unliked successfully',
-        liked: false,
-        likes: resource.likes
-      });
-    } else {
-      // Like
-      const newLike = {
-        id: Date.now().toString(),
-        resourceId: id,
-        userId,
-        likedAt: new Date().toISOString()
+        title,
+        titleDescription,
+        contentPreview,
+        category,
+        fileUrl: fileUrl || null,
+        tags: Array.isArray(tags) ? tags : [],
+        author: {
+          id: userId,
+          firstName,
+          lastName,
+        },
+        status: "active",
+        views: 0,
+        downloads: 0,
+        likes: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
-      resourceLikes.push(newLike);
-      resource.likes += 1;
+      knowledgeResources.push(newResource);
 
-      res.json({
-        message: 'Resource liked successfully',
-        liked: true,
-        likes: resource.likes
+      res.status(201).json({
+        message: "Knowledge resource added successfully",
+        resource: newResource,
+      });
+    } catch (error) {
+      console.error("Add knowledge resource error:", error);
+      res.status(500).json({
+        error: "Creation Failed",
+        message: "Failed to add knowledge resource",
       });
     }
-
-  } catch (error) {
-    console.error('Like/unlike error:', error);
-    res.status(500).json({
-      error: 'Action Failed',
-      message: 'Failed to like/unlike resource'
-    });
   }
-});
-
-/**
- * @route   GET /api/knowledge/:id/likes
- * @desc    Get users who liked a resource
- * @access  Public
- */
-router.get('/:id/likes', (req, res) => {
-  try {
-    const { id } = req.params;
-    const { page = 1, limit = 20 } = req.query;
-
-    const resource = knowledgeResources.find(r => r.id === id);
-    if (!resource) {
-      return res.status(404).json({
-        error: 'Resource Not Found',
-        message: 'Knowledge resource not found'
-      });
-    }
-
-    const resourceLikesList = resourceLikes.filter(l => l.resourceId === id);
-
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const paginatedLikes = resourceLikesList.slice(startIndex, endIndex);
-
-    const totalLikes = resourceLikesList.length;
-    const totalPages = Math.ceil(totalLikes / limit);
-
-    res.json({
-      likes: paginatedLikes,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages,
-        totalLikes,
-        hasNextPage: endIndex < totalLikes,
-        hasPrevPage: page > 1
-      }
-    });
-
-  } catch (error) {
-    console.error('Get likes error:', error);
-    res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch likes'
-    });
-  }
-});
+);
 
 /**
  * @route   GET /api/knowledge/categories
  * @desc    Get all available categories
  * @access  Public
  */
-router.get('/categories', (req, res) => {
+router.get("/categories", (req, res) => {
   try {
-    const categories = [...new Set(knowledgeResources.map(r => r.category))];
-    
-    res.json({
-      categories: categories.sort()
-    });
+    const categories = [...new Set(knowledgeResources.map((r) => r.category))];
 
+    res.json({
+      categories: categories.sort(),
+    });
   } catch (error) {
-    console.error('Get categories error:', error);
+    console.error("Get categories error:", error);
     res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch categories'
+      error: "Fetch Failed",
+      message: "Failed to fetch categories",
     });
   }
 });
@@ -574,40 +184,39 @@ router.get('/categories', (req, res) => {
  * @desc    Get predefined categories for dropdown
  * @access  Public
  */
-router.get('/predefined-categories', (req, res) => {
+router.get("/predefined-categories", (req, res) => {
   try {
     const predefinedCategories = [
-      'Technology',
-      'Business',
-      'Marketing',
-      'Design',
-      'Development',
-      'Finance',
-      'Healthcare',
-      'Education',
-      'Research',
-      'Innovation',
-      'Startup',
-      'Management',
-      'Sales',
-      'Operations',
-      'Strategy',
-      'Analytics',
-      'Data Science',
-      'AI/ML',
-      'Blockchain',
-      'Sustainability'
+      "Technology",
+      "Business",
+      "Marketing",
+      "Design",
+      "Development",
+      "Finance",
+      "Healthcare",
+      "Education",
+      "Research",
+      "Innovation",
+      "Startup",
+      "Management",
+      "Sales",
+      "Operations",
+      "Strategy",
+      "Analytics",
+      "Data Science",
+      "AI/ML",
+      "Blockchain",
+      "Sustainability",
     ];
-    
-    res.json({
-      categories: predefinedCategories
-    });
 
+    res.json({
+      categories: predefinedCategories,
+    });
   } catch (error) {
-    console.error('Get predefined categories error:', error);
+    console.error("Get predefined categories error:", error);
     res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch predefined categories'
+      error: "Fetch Failed",
+      message: "Failed to fetch predefined categories",
     });
   }
 });
@@ -617,20 +226,19 @@ router.get('/predefined-categories', (req, res) => {
  * @desc    Get available tags for multiple selection
  * @access  Public
  */
-router.get('/available-tags', (req, res) => {
+router.get("/available-tags", (req, res) => {
   try {
-    const allTags = knowledgeResources.flatMap(r => r.tags || []);
+    const allTags = knowledgeResources.flatMap((r) => r.tags || []);
     const uniqueTags = [...new Set(allTags)];
-    
-    res.json({
-      tags: uniqueTags.sort()
-    });
 
+    res.json({
+      tags: uniqueTags.sort(),
+    });
   } catch (error) {
-    console.error('Get available tags error:', error);
+    console.error("Get available tags error:", error);
     res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch available tags'
+      error: "Fetch Failed",
+      message: "Failed to fetch available tags",
     });
   }
 });
@@ -640,49 +248,62 @@ router.get('/available-tags', (req, res) => {
  * @desc    Upload file for knowledge resource
  * @access  Private
  */
-router.post('/upload', authenticateToken, (req, res) => {
+router.post("/upload", authenticateToken, (req, res) => {
   try {
     // This is a placeholder for file upload functionality
     // In a real implementation, you would use multer or similar middleware
     // to handle file uploads and return the file URL
-    
+
     const { fileName, fileType, fileSize } = req.body;
-    
+
     // Validate file type and size
-    const allowedTypes = ['pdf', 'doc', 'docx', 'txt', 'md', 'jpg', 'jpeg', 'png', 'gif', 'mp4', 'avi', 'mov'];
-    const fileExtension = fileName.split('.').pop().toLowerCase();
-    
+    const allowedTypes = [
+      "pdf",
+      "doc",
+      "docx",
+      "txt",
+      "md",
+      "jpg",
+      "jpeg",
+      "png",
+      "gif",
+      "mp4",
+      "avi",
+      "mov",
+    ];
+    const fileExtension = fileName.split(".").pop().toLowerCase();
+
     if (!allowedTypes.includes(fileExtension)) {
       return res.status(400).json({
-        error: 'Invalid File Type',
-        message: 'File type not supported. Allowed types: ' + allowedTypes.join(', ')
+        error: "Invalid File Type",
+        message:
+          "File type not supported. Allowed types: " + allowedTypes.join(", "),
       });
     }
-    
+
     const maxSize = 50 * 1024 * 1024; // 50MB
     if (fileSize > maxSize) {
       return res.status(400).json({
-        error: 'File Too Large',
-        message: 'File size must be less than 50MB'
+        error: "File Too Large",
+        message: "File size must be less than 50MB",
       });
     }
-    
+
     // Generate file URL (in real implementation, this would be the actual uploaded file URL)
     const fileUrl = `/uploads/knowledge/${Date.now()}-${fileName}`;
-    
+
     res.json({
-      message: 'File upload successful',
+      message: "File upload successful",
       fileUrl,
       fileName,
       fileType: fileExtension,
-      fileSize
+      fileSize,
     });
-
   } catch (error) {
-    console.error('File upload error:', error);
+    console.error("File upload error:", error);
     res.status(500).json({
-      error: 'Upload Failed',
-      message: 'Failed to upload file'
+      error: "Upload Failed",
+      message: "Failed to upload file",
     });
   }
 });
@@ -692,12 +313,14 @@ router.post('/upload', authenticateToken, (req, res) => {
  * @desc    Get user's knowledge resources
  * @access  Private
  */
-router.get('/user/resources', authenticateToken, (req, res) => {
+router.get("/user/resources", authenticateToken, (req, res) => {
   try {
     const { userId } = req.user;
     const { page = 1, limit = 10 } = req.query;
 
-    const userResources = knowledgeResources.filter(r => r.author.id === userId);
+    const userResources = knowledgeResources.filter(
+      (r) => r.author.id === userId
+    );
 
     // Pagination
     const startIndex = (page - 1) * limit;
@@ -714,15 +337,430 @@ router.get('/user/resources', authenticateToken, (req, res) => {
         totalPages,
         totalResources,
         hasNextPage: endIndex < totalResources,
-        hasPrevPage: page > 1
-      }
+        hasPrevPage: page > 1,
+      },
     });
-
   } catch (error) {
-    console.error('Get user resources error:', error);
+    console.error("Get user resources error:", error);
     res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch user resources'
+      error: "Fetch Failed",
+      message: "Failed to fetch user resources",
+    });
+  }
+});
+
+/**
+ * @route   GET /api/knowledge/:id
+ * @desc    Get knowledge resource by ID with comments
+ * @access  Public
+ */
+router.get("/:id", optionalAuth, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.user || {};
+
+    const resource = knowledgeResources.find((r) => r.id === id);
+    if (!resource) {
+      return res.status(404).json({
+        error: "Resource Not Found",
+        message: "Knowledge resource not found",
+      });
+    }
+
+    // Increment view count if user is authenticated
+    if (userId && userId !== resource.author.id) {
+      resource.views += 1;
+
+      // Track view
+      const existingView = resourceViews.find(
+        (v) => v.resourceId === id && v.userId === userId
+      );
+      if (!existingView) {
+        resourceViews.push({
+          id: Date.now().toString(),
+          resourceId: id,
+          userId,
+          viewedAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    // Get comments for this resource
+    const resourceComments = knowledgeComments.filter(
+      (c) => c.resourceId === id
+    );
+
+    res.json({
+      resource: {
+        ...resource,
+        comments: resourceComments,
+      },
+    });
+  } catch (error) {
+    console.error("Get knowledge resource error:", error);
+    res.status(500).json({
+      error: "Fetch Failed",
+      message: "Failed to fetch knowledge resource",
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/knowledge/:id
+ * @desc    Update knowledge resource (only author can update)
+ * @access  Private
+ */
+router.put(
+  "/:id",
+  authenticateToken,
+  knowledgeValidation.addResource,
+  (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId } = req.user;
+      const {
+        title,
+        titleDescription,
+        contentPreview,
+        category,
+        fileUrl,
+        tags,
+      } = req.body;
+
+      const resource = knowledgeResources.find((r) => r.id === id);
+      if (!resource) {
+        return res.status(404).json({
+          error: "Resource Not Found",
+          message: "Knowledge resource not found",
+        });
+      }
+
+      // Check if user is the author
+      if (resource.author.id !== userId) {
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "You can only update your own knowledge resources",
+        });
+      }
+
+      // Update resource
+      resource.title = title;
+      resource.titleDescription = titleDescription;
+      resource.contentPreview = contentPreview;
+      resource.category = category;
+      resource.fileUrl = fileUrl || resource.fileUrl;
+      resource.tags = Array.isArray(tags) ? tags : [];
+      resource.updatedAt = new Date().toISOString();
+
+      res.json({
+        message: "Knowledge resource updated successfully",
+        resource,
+      });
+    } catch (error) {
+      console.error("Update knowledge resource error:", error);
+      res.status(500).json({
+        error: "Update Failed",
+        message: "Failed to update knowledge resource",
+      });
+    }
+  }
+);
+
+/**
+ * @route   DELETE /api/knowledge/:id
+ * @desc    Delete knowledge resource (only author can delete)
+ * @access  Private
+ */
+router.delete("/:id", authenticateToken, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.user;
+
+    const resourceIndex = knowledgeResources.findIndex((r) => r.id === id);
+    if (resourceIndex === -1) {
+      return res.status(404).json({
+        error: "Resource Not Found",
+        message: "Knowledge resource not found",
+      });
+    }
+
+    const resource = knowledgeResources[resourceIndex];
+
+    // Check if user is the author
+    if (resource.author.id !== userId) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "You can only delete your own knowledge resources",
+      });
+    }
+
+    // Delete resource
+    knowledgeResources.splice(resourceIndex, 1);
+
+    // Delete associated data
+    knowledgeComments = knowledgeComments.filter((c) => c.resourceId !== id);
+    resourceViews = resourceViews.filter((v) => v.resourceId !== id);
+    resourceDownloads = resourceDownloads.filter((d) => d.resourceId !== id);
+    resourceLikes = resourceLikes.filter((l) => l.resourceId !== id);
+
+    res.json({
+      message: "Knowledge resource deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete knowledge resource error:", error);
+    res.status(500).json({
+      error: "Deletion Failed",
+      message: "Failed to delete knowledge resource",
+    });
+  }
+});
+
+/**
+ * @route   POST /api/knowledge/:id/comments
+ * @desc    Add comment to knowledge resource
+ * @access  Private
+ */
+router.post("/:id/comments", authenticateToken, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, firstName, lastName } = req.user;
+    const { content } = req.body;
+
+    const resource = knowledgeResources.find((r) => r.id === id);
+    if (!resource) {
+      return res.status(404).json({
+        error: "Resource Not Found",
+        message: "Knowledge resource not found",
+      });
+    }
+
+    const newComment = {
+      id: Date.now().toString(),
+      resourceId: id,
+      content,
+      author: {
+        id: userId,
+        firstName,
+        lastName,
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    knowledgeComments.push(newComment);
+
+    res.status(201).json({
+      message: "Comment added successfully",
+      comment: newComment,
+    });
+  } catch (error) {
+    console.error("Add comment error:", error);
+    res.status(500).json({
+      error: "Comment Failed",
+      message: "Failed to add comment",
+    });
+  }
+});
+
+/**
+ * @route   GET /api/knowledge/:id/comments
+ * @desc    Get comments for a knowledge resource
+ * @access  Public
+ */
+router.get("/:id/comments", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+
+    const resource = knowledgeResources.find((r) => r.id === id);
+    if (!resource) {
+      return res.status(404).json({
+        error: "Resource Not Found",
+        message: "Knowledge resource not found",
+      });
+    }
+
+    const resourceComments = knowledgeComments.filter(
+      (c) => c.resourceId === id
+    );
+
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = page * limit;
+    const paginatedComments = resourceComments.slice(startIndex, endIndex);
+
+    const totalComments = resourceComments.length;
+    const totalPages = Math.ceil(totalComments / limit);
+
+    res.json({
+      comments: paginatedComments,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages,
+        totalComments,
+        hasNextPage: endIndex < totalComments,
+        hasPrevPage: page > 1,
+      },
+    });
+  } catch (error) {
+    console.error("Get comments error:", error);
+    res.status(500).json({
+      error: "Fetch Failed",
+      message: "Failed to fetch comments",
+    });
+  }
+});
+
+/**
+ * @route   POST /api/knowledge/:id/download
+ * @desc    Track resource download
+ * @access  Private
+ */
+router.post("/:id/download", authenticateToken, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.user;
+
+    const resource = knowledgeResources.find((r) => r.id === id);
+    if (!resource) {
+      return res.status(404).json({
+        error: "Resource Not Found",
+        message: "Knowledge resource not found",
+      });
+    }
+
+    // Increment download count
+    resource.downloads += 1;
+
+    // Track download
+    const existingDownload = resourceDownloads.find(
+      (d) => d.resourceId === id && d.userId === userId
+    );
+    if (!existingDownload) {
+      resourceDownloads.push({
+        id: Date.now().toString(),
+        resourceId: id,
+        userId,
+        downloadedAt: new Date().toISOString(),
+      });
+    }
+
+    res.json({
+      message: "Download tracked successfully",
+      downloads: resource.downloads,
+    });
+  } catch (error) {
+    console.error("Track download error:", error);
+    res.status(500).json({
+      error: "Tracking Failed",
+      message: "Failed to track download",
+    });
+  }
+});
+
+/**
+ * @route   POST /api/knowledge/:id/like
+ * @desc    Like/unlike knowledge resource
+ * @access  Private
+ */
+router.post("/:id/like", authenticateToken, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.user;
+
+    const resource = knowledgeResources.find((r) => r.id === id);
+    if (!resource) {
+      return res.status(404).json({
+        error: "Resource Not Found",
+        message: "Knowledge resource not found",
+      });
+    }
+
+    // Check if user already liked
+    const existingLike = resourceLikes.find(
+      (l) => l.resourceId === id && l.userId === userId
+    );
+
+    if (existingLike) {
+      // Unlike
+      resourceLikes = resourceLikes.filter((l) => l.id !== existingLike.id);
+      resource.likes -= 1;
+
+      res.json({
+        message: "Resource unliked successfully",
+        liked: false,
+        likes: resource.likes,
+      });
+    } else {
+      // Like
+      const newLike = {
+        id: Date.now().toString(),
+        resourceId: id,
+        userId,
+        likedAt: new Date().toISOString(),
+      };
+
+      resourceLikes.push(newLike);
+      resource.likes += 1;
+
+      res.json({
+        message: "Resource liked successfully",
+        liked: true,
+        likes: resource.likes,
+      });
+    }
+  } catch (error) {
+    console.error("Like/unlike error:", error);
+    res.status(500).json({
+      error: "Action Failed",
+      message: "Failed to like/unlike resource",
+    });
+  }
+});
+
+/**
+ * @route   GET /api/knowledge/:id/likes
+ * @desc    Get users who liked a resource
+ * @access  Public
+ */
+router.get("/:id/likes", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+
+    const resource = knowledgeResources.find((r) => r.id === id);
+    if (!resource) {
+      return res.status(404).json({
+        error: "Resource Not Found",
+        message: "Knowledge resource not found",
+      });
+    }
+
+    const resourceLikesList = resourceLikes.filter((l) => l.resourceId === id);
+
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = page * limit;
+    const paginatedLikes = resourceLikesList.slice(startIndex, endIndex);
+
+    const totalLikes = resourceLikesList.length;
+    const totalPages = Math.ceil(totalLikes / limit);
+
+    res.json({
+      likes: paginatedLikes,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages,
+        totalLikes,
+        hasNextPage: endIndex < totalLikes,
+        hasPrevPage: page > 1,
+      },
+    });
+  } catch (error) {
+    console.error("Get likes error:", error);
+    res.status(500).json({
+      error: "Fetch Failed",
+      message: "Failed to fetch likes",
     });
   }
 });
