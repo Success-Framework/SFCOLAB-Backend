@@ -79,6 +79,54 @@
         "company": null,
         "socialLinks": {}
       }
+    },
+    {
+      "id": "1758929772398",
+      "firstName": "john",
+      "lastName": "doe",
+      "email": "johndoe@gmail.com",
+      "password": "$2a$12$8Ztm0bZvvb394yey9NpOUOIMmDBqvFRk4UKlglqn3EA.QgLnmjI4q",
+      "createdAt": "2025-09-26T23:36:12.398Z",
+      "updatedAt": "2025-09-26T23:36:12.400Z",
+      "isEmailVerified": false,
+      "profile": {
+        "picture": null,
+        "bio": null,
+        "company": null,
+        "socialLinks": {}
+      }
+    },
+    {
+      "id": "1758929835972",
+      "firstName": "john",
+      "lastName": "john",
+      "email": "johndoe1@gmail.com",
+      "password": "$2a$12$ItwUWOZZTw4irh7oUPUUb.m9MAMG36fPM5uu.7U8LOeVw28HNZTHS",
+      "createdAt": "2025-09-26T23:37:15.972Z",
+      "updatedAt": "2025-09-26T23:37:15.972Z",
+      "isEmailVerified": false,
+      "profile": {
+        "picture": null,
+        "bio": null,
+        "company": null,
+        "socialLinks": {}
+      }
+    },
+    {
+      "id": "1758929997234",
+      "firstName": "jane",
+      "lastName": "doe",
+      "email": "janedoe@gmail.com",
+      "password": "$2a$12$vFdMHShkmjjbvnSOvJrqN.z6YnVgfltzPssj9Uykl.vuwdWv.TXHa",
+      "createdAt": "2025-09-26T23:39:57.234Z",
+      "updatedAt": "2025-09-26T23:39:57.234Z",
+      "isEmailVerified": false,
+      "profile": {
+        "picture": null,
+        "bio": null,
+        "company": null,
+        "socialLinks": {}
+      }
     }
   ],
   "refreshTokens": [
@@ -164,5 +212,5 @@
   "postLikes": [],
   "postComments": [],
   "notifications": [],
-  "lastUpdated": "2025-09-19T18:08:20.727Z"
+  "lastUpdated": "2025-09-26T23:39:57.235Z"
 }
