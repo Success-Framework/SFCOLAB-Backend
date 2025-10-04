@@ -2,11 +2,11 @@ const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
 const { profileValidation, authValidation } = require('../middleware/validation');
 const { hashPassword, comparePassword } = require('../utils/password');
+const { findInCollection, getCollection, updateItemInCollection } = require('../utils/dataPersistence');
 
 const router = express.Router();
 
-// Import user data from auth routes (replace with database operations later)
-const { users } = require('./auth');
+// Users are stored in JSON persistence via dataPersistence utils
 
 /**
  * @route   GET /api/settings/profile
@@ -17,7 +17,7 @@ router.get('/profile', authenticateToken, (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -58,7 +58,7 @@ router.put('/profile', authenticateToken, profileValidation.updateProfile, (req,
     const { userId } = req.user;
     const { firstName, lastName, bio, company, socialLinks } = req.body;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -66,28 +66,30 @@ router.put('/profile', authenticateToken, profileValidation.updateProfile, (req,
       });
     }
 
-    // Update profile fields
-    if (firstName !== undefined) user.firstName = firstName;
-    if (lastName !== undefined) user.lastName = lastName;
-    if (bio !== undefined) user.profile.bio = bio;
-    if (company !== undefined) user.profile.company = company;
+    const newProfile = { ...user.profile };
+    if (bio !== undefined) newProfile.bio = bio;
+    if (company !== undefined) newProfile.company = company;
     if (socialLinks !== undefined) {
-      user.profile.socialLinks = {
-        ...user.profile.socialLinks,
-        ...socialLinks
-      };
+      newProfile.socialLinks = { ...(user.profile?.socialLinks || {}), ...socialLinks };
     }
 
-    user.updatedAt = new Date().toISOString();
+    const updates = {
+      updatedAt: new Date().toISOString(),
+      ...(firstName !== undefined ? { firstName } : {}),
+      ...(lastName !== undefined ? { lastName } : {}),
+      profile: newProfile
+    };
 
-    // Return updated profile data
+    updateItemInCollection('users', userId, updates);
+
+    const refreshed = findInCollection('users', u => u.id === userId);
     const profileData = {
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      profile: user.profile,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt
+      firstName: refreshed.firstName,
+      lastName: refreshed.lastName,
+      email: refreshed.email,
+      profile: refreshed.profile,
+      createdAt: refreshed.createdAt,
+      updatedAt: refreshed.updatedAt
     };
 
     res.json({
@@ -121,7 +123,7 @@ router.post('/profile/picture', authenticateToken, (req, res) => {
       });
     }
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -130,8 +132,10 @@ router.post('/profile/picture', authenticateToken, (req, res) => {
     }
 
     // Update profile picture
-    user.profile.picture = pictureUrl;
-    user.updatedAt = new Date().toISOString();
+    updateItemInCollection('users', userId, {
+      profile: { ...user.profile, picture: pictureUrl },
+      updatedAt: new Date().toISOString()
+    });
 
     res.json({
       message: 'Profile picture updated successfully',
@@ -156,7 +160,7 @@ router.delete('/profile/picture', authenticateToken, (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -165,8 +169,10 @@ router.delete('/profile/picture', authenticateToken, (req, res) => {
     }
 
     // Remove profile picture
-    user.profile.picture = null;
-    user.updatedAt = new Date().toISOString();
+    updateItemInCollection('users', userId, {
+      profile: { ...user.profile, picture: null },
+      updatedAt: new Date().toISOString()
+    });
 
     res.json({
       message: 'Profile picture removed successfully'
@@ -190,7 +196,7 @@ router.get('/account', authenticateToken, (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -229,7 +235,7 @@ router.post('/account/change-password', authenticateToken, authValidation.change
     const { userId } = req.user;
     const { currentPassword, newPassword } = req.body;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -250,8 +256,10 @@ router.post('/account/change-password', authenticateToken, authValidation.change
     const hashedNewPassword = await hashPassword(newPassword);
 
     // Update password
-    user.password = hashedNewPassword;
-    user.updatedAt = new Date().toISOString();
+    updateItemInCollection('users', userId, {
+      password: hashedNewPassword,
+      updatedAt: new Date().toISOString()
+    });
 
     res.json({
       message: 'Password changed successfully'
@@ -292,7 +300,7 @@ router.post('/account/change-email', authenticateToken, (req, res) => {
       });
     }
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -301,7 +309,8 @@ router.post('/account/change-email', authenticateToken, (req, res) => {
     }
 
     // Check if new email already exists
-    const existingUser = users.find(u => u.email === newEmail && u.id !== userId);
+    const allUsers = getCollection('users');
+    const existingUser = allUsers.find(u => u.email === newEmail && u.id !== userId);
     if (existingUser) {
       return res.status(400).json({
         error: 'Email Already Exists',
@@ -319,9 +328,11 @@ router.post('/account/change-email', authenticateToken, (req, res) => {
       }
 
       // Update email
-      user.email = newEmail;
-      user.isEmailVerified = false; // Reset email verification
-      user.updatedAt = new Date().toISOString();
+      updateItemInCollection('users', userId, {
+        email: newEmail,
+        isEmailVerified: false,
+        updatedAt: new Date().toISOString()
+      });
 
       // TODO: Send verification email to new email address
       // This will be implemented when email service is set up
@@ -381,11 +392,11 @@ router.post('/account/delete-account', authenticateToken, (req, res) => {
         });
       }
 
-      // TODO: Implement account deletion logic
-      // This will be implemented when database is set up
-      // For now, just mark as deleted
-      user.status = 'deleted';
-      user.updatedAt = new Date().toISOString();
+      // Mark as deleted in persistence
+      updateItemInCollection('users', userId, {
+        status: 'deleted',
+        updatedAt: new Date().toISOString()
+      });
 
       res.json({
         message: 'Account deletion request submitted successfully'
@@ -410,7 +421,7 @@ router.get('/preferences', authenticateToken, (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -458,7 +469,7 @@ router.put('/preferences', authenticateToken, (req, res) => {
       theme 
     } = req.body;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -466,24 +477,22 @@ router.put('/preferences', authenticateToken, (req, res) => {
       });
     }
 
-    // Initialize preferences if not exists
-    if (!user.preferences) {
-      user.preferences = {};
-    }
+    const newPrefs = { ...(user.preferences || {}) };
+    if (emailNotifications !== undefined) newPrefs.emailNotifications = emailNotifications;
+    if (pushNotifications !== undefined) newPrefs.pushNotifications = pushNotifications;
+    if (privacy !== undefined) newPrefs.privacy = privacy;
+    if (language !== undefined) newPrefs.language = language;
+    if (timezone !== undefined) newPrefs.timezone = timezone;
+    if (theme !== undefined) newPrefs.theme = theme;
 
-    // Update preferences
-    if (emailNotifications !== undefined) user.preferences.emailNotifications = emailNotifications;
-    if (pushNotifications !== undefined) user.preferences.pushNotifications = pushNotifications;
-    if (privacy !== undefined) user.preferences.privacy = privacy;
-    if (language !== undefined) user.preferences.language = language;
-    if (timezone !== undefined) user.preferences.timezone = timezone;
-    if (theme !== undefined) user.preferences.theme = theme;
-
-    user.updatedAt = new Date().toISOString();
+    updateItemInCollection('users', userId, {
+      preferences: newPrefs,
+      updatedAt: new Date().toISOString()
+    });
 
     res.json({
       message: 'Preferences updated successfully',
-      preferences: user.preferences
+      preferences: newPrefs
     });
 
   } catch (error) {
@@ -504,7 +513,7 @@ router.get('/notifications', authenticateToken, (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -548,7 +557,7 @@ router.put('/notifications', authenticateToken, (req, res) => {
     const { userId } = req.user;
     const notificationSettings = req.body;
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -556,18 +565,15 @@ router.put('/notifications', authenticateToken, (req, res) => {
       });
     }
 
-    // Initialize notification settings if not exists
-    if (!user.notificationSettings) {
-      user.notificationSettings = {};
-    }
-
-    // Update notification settings
-    Object.assign(user.notificationSettings, notificationSettings);
-    user.updatedAt = new Date().toISOString();
+    const newNotif = { ...(user.notificationSettings || {}), ...notificationSettings };
+    updateItemInCollection('users', userId, {
+      notificationSettings: newNotif,
+      updatedAt: new Date().toISOString()
+    });
 
     res.json({
       message: 'Notification settings updated successfully',
-      notificationSettings: user.notificationSettings
+      notificationSettings: newNotif
     });
 
   } catch (error) {

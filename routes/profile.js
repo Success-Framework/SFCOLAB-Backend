@@ -356,7 +356,7 @@ router.get('/posts/:id', optionalAuth, (req, res) => {
     }
 
     // Get comments for this post
-    const postComments = postComments.filter(c => c.postId === id);
+    const postCommentsForPost = postComments.filter(c => c.postId === id);
 
     // Check if user liked this post
     let isLiked = false;
@@ -367,7 +367,7 @@ router.get('/posts/:id', optionalAuth, (req, res) => {
     res.json({
       post: {
         ...post,
-        comments: postComments,
+        comments: postCommentsForPost,
         isLiked
       }
     });
