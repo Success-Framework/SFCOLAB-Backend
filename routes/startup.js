@@ -1,53 +1,33 @@
 const express = require('express');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
 const { startupValidation } = require('../middleware/validation');
+const { Startup, StartupMember, JoinRequest } = require('../models/schemas');
 
 const router = express.Router();
 
-// Mock data (replace with database operations later)
-let startups = [];
-let joinRequests = [];
-let startupMembers = [];
+// Using MongoDB via Mongoose models
 
 /**
  * @route   POST /api/startup/register
  * @desc    Register a new startup
  * @access  Private
  */
-router.post('/register', authenticateToken, startupValidation.registerStartup, (req, res) => {
+router.post('/register', authenticateToken, startupValidation.registerStartup, async (req, res) => {
   try {
     const { userId, firstName, lastName } = req.user;
-    const { 
-      name, 
-      industry, 
-      location, 
-      description, 
-      stage, 
-      logo, 
-      banner, 
-      roles = [] 
-    } = req.body;
+    const { name, industry, location, description, stage, logo, banner, roles = [] } = req.body;
 
-    // Check if startup name already exists
-    const existingStartup = startups.find(s => s.name.toLowerCase() === name.toLowerCase());
-    if (existingStartup) {
-      return res.status(400).json({
-        error: 'Startup Already Exists',
-        message: 'A startup with this name already exists'
-      });
+    const nameExists = await Startup.findOne({ name: new RegExp(`^${name}$`, 'i') });
+    if (nameExists) {
+      return res.status(400).json({ error: 'Startup Already Exists', message: 'A startup with this name already exists' });
     }
 
-    // Check if user is already part of another startup
-    const existingMembership = startupMembers.find(m => m.userId === userId);
+    const existingMembership = await StartupMember.findOne({ userId });
     if (existingMembership) {
-      return res.status(400).json({
-        error: 'Already a Member',
-        message: 'You are already a member of another startup'
-      });
+      return res.status(400).json({ error: 'Already a Member', message: 'You are already a member of another startup' });
     }
 
-    const newStartup = {
-      id: Date.now().toString(),
+    const startupDoc = await Startup.create({
       name,
       industry,
       location,
@@ -56,50 +36,19 @@ router.post('/register', authenticateToken, startupValidation.registerStartup, (
       logo: logo || null,
       banner: banner || null,
       roles: Array.isArray(roles) ? roles : [],
-      creator: {
-        id: userId,
-        firstName,
-        lastName
-      },
+      creator: { id: userId, firstName, lastName },
       status: 'active',
-      members: [{
-        userId,
-        firstName,
-        lastName,
-        role: 'founder',
-        joinedAt: new Date().toISOString(),
-        isActive: true
-      }],
+      members: [{ userId, firstName, lastName, role: 'founder', joinedAt: new Date(), isActive: true }],
       memberCount: 1,
       views: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    startups.push(newStartup);
-
-    // Add to startup members
-    startupMembers.push({
-      startupId: newStartup.id,
-      userId,
-      firstName,
-      lastName,
-      role: 'founder',
-      joinedAt: new Date().toISOString(),
-      isActive: true
     });
 
-    res.status(201).json({
-      message: 'Startup registered successfully',
-      startup: newStartup
-    });
+    await StartupMember.create({ startupId: startupDoc._id, userId, firstName, lastName, role: 'founder', joinedAt: new Date(), isActive: true });
 
+    res.status(201).json({ message: 'Startup registered successfully', startup: startupDoc });
   } catch (error) {
     console.error('Register startup error:', error);
-    res.status(500).json({
-      error: 'Registration Failed',
-      message: 'Failed to register startup'
-    });
+    res.status(500).json({ error: 'Registration Failed', message: 'Failed to register startup' });
   }
 });
 
@@ -108,96 +57,40 @@ router.post('/register', authenticateToken, startupValidation.registerStartup, (
  * @desc    Get all startups with pagination and filtering
  * @access  Public
  */
-router.get('/', optionalAuth, (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      industry, 
-      location, 
-      stage, 
-      search, 
-      sortBy = 'createdAt',
-      sortOrder = 'desc' 
-    } = req.query;
+    const { page = 1, limit = 10, industry, location, stage, search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
 
-    let filteredStartups = [...startups];
-
-    // Filter by industry
-    if (industry) {
-      filteredStartups = filteredStartups.filter(startup => startup.industry === industry);
-    }
-
-    // Filter by location
-    if (location) {
-      filteredStartups = filteredStartups.filter(startup => 
-        startup.location.toLowerCase().includes(location.toLowerCase())
-      );
-    }
-
-    // Filter by stage
-    if (stage) {
-      filteredStartups = filteredStartups.filter(startup => startup.stage === stage);
-    }
-
-    // Search functionality
+    const query = {};
+    if (industry) query.industry = industry;
+    if (location) query.location = new RegExp(location, 'i');
+    if (stage) query.stage = stage;
     if (search) {
-      const searchLower = search.toLowerCase();
-      filteredStartups = filteredStartups.filter(startup => 
-        startup.name.toLowerCase().includes(searchLower) ||
-        startup.description.toLowerCase().includes(searchLower) ||
-        startup.industry.toLowerCase().includes(searchLower)
-      );
+      const regex = new RegExp(search, 'i');
+      query.$or = [ { name: regex }, { description: regex }, { industry: regex } ];
     }
 
-    // Sorting
-    filteredStartups.sort((a, b) => {
-      let aValue = a[sortBy];
-      let bValue = b[sortBy];
-
-      if (sortBy === 'creator') {
-        aValue = `${a.creator.firstName} ${a.creator.lastName}`;
-        bValue = `${b.creator.firstName} ${b.creator.lastName}`;
-      }
-
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
-
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
-    });
-
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const paginatedStartups = filteredStartups.slice(startIndex, endIndex);
-
-    // Get total count for pagination info
-    const totalStartups = filteredStartups.length;
-    const totalPages = Math.ceil(totalStartups / limit);
+    const sort = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const [items, totalStartups] = await Promise.all([
+      Startup.find(query).sort(sort).skip(skip).limit(parseInt(limit)),
+      Startup.countDocuments(query)
+    ]);
+    const totalPages = Math.ceil(totalStartups / parseInt(limit));
 
     res.json({
-      startups: paginatedStartups,
+      startups: items,
       pagination: {
         currentPage: parseInt(page),
         totalPages,
         totalStartups,
-        hasNextPage: endIndex < totalStartups,
-        hasPrevPage: page > 1
+        hasNextPage: skip + items.length < totalStartups,
+        hasPrevPage: parseInt(page) > 1
       }
     });
-
   } catch (error) {
     console.error('Get startups error:', error);
-    res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch startups'
-    });
+    res.status(500).json({ error: 'Fetch Failed', message: 'Failed to fetch startups' });
   }
 });
 
@@ -206,46 +99,30 @@ router.get('/', optionalAuth, (req, res) => {
  * @desc    Get startup by ID with details
  * @access  Public
  */
-router.get('/:id', optionalAuth, (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user || {};
 
-    const startup = startups.find(s => s.id === id);
-    if (!startup) {
-      return res.status(404).json({
-        error: 'Startup Not Found',
-        message: 'Startup not found'
-      });
-    }
+    const startup = await Startup.findById(id);
+    if (!startup) return res.status(404).json({ error: 'Startup Not Found', message: 'Startup not found' });
 
-    // Increment view count if user is authenticated and not a member
     if (userId) {
-      const isMember = startup.members.find(m => m.userId === userId);
+      const isMember = startup.members.find(m => m.userId?.toString() === userId);
       if (!isMember) {
-        startup.views += 1;
+        await Startup.findByIdAndUpdate(id, { $inc: { views: 1 } });
       }
     }
 
-    // Get join requests if user is the creator
     let joinRequestsData = [];
-    if (userId && startup.creator.id === userId) {
-      joinRequestsData = joinRequests.filter(r => r.startupId === id);
+    if (userId && startup.creator.id.toString() === userId) {
+      joinRequestsData = await JoinRequest.find({ startupId: id });
     }
 
-    res.json({
-      startup: {
-        ...startup,
-        joinRequests: joinRequestsData
-      }
-    });
-
+    res.json({ startup: { ...startup.toObject(), joinRequests: joinRequestsData } });
   } catch (error) {
     console.error('Get startup error:', error);
-    res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch startup'
-    });
+    res.status(500).json({ error: 'Fetch Failed', message: 'Failed to fetch startup' });
   }
 });
 
@@ -254,72 +131,35 @@ router.get('/:id', optionalAuth, (req, res) => {
  * @desc    Update startup (only creator can update)
  * @access  Private
  */
-router.put('/:id', authenticateToken, startupValidation.registerStartup, (req, res) => {
+router.put('/:id', authenticateToken, startupValidation.registerStartup, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user;
-    const { 
-      name, 
-      industry, 
-      location, 
-      description, 
-      stage, 
-      logo, 
-      banner, 
-      roles 
-    } = req.body;
+    const { name, industry, location, description, stage, logo, banner, roles } = req.body;
 
-    const startup = startups.find(s => s.id === id);
-    if (!startup) {
-      return res.status(404).json({
-        error: 'Startup Not Found',
-        message: 'Startup not found'
-      });
+    const startup = await Startup.findById(id);
+    if (!startup) return res.status(404).json({ error: 'Startup Not Found', message: 'Startup not found' });
+    if (startup.creator.id.toString() !== userId) return res.status(403).json({ error: 'Forbidden', message: 'Only the startup creator can update startup details' });
+
+    if (name && name.toLowerCase() !== startup.name.toLowerCase()) {
+      const conflict = await Startup.findOne({ _id: { $ne: id }, name: new RegExp(`^${name}$`, 'i') });
+      if (conflict) return res.status(400).json({ error: 'Name Conflict', message: 'A startup with this name already exists' });
     }
 
-    // Check if user is the creator
-    if (startup.creator.id !== userId) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only the startup creator can update startup details'
-      });
-    }
-
-    // Check if new name conflicts with existing startups
-    if (name !== startup.name) {
-      const existingStartup = startups.find(s => 
-        s.id !== id && s.name.toLowerCase() === name.toLowerCase()
-      );
-      if (existingStartup) {
-        return res.status(400).json({
-          error: 'Name Conflict',
-          message: 'A startup with this name already exists'
-        });
-      }
-    }
-
-    // Update startup
     startup.name = name;
     startup.industry = industry;
     startup.location = location;
     startup.description = description;
     startup.stage = stage;
-    startup.logo = logo || startup.logo;
-    startup.banner = banner || startup.banner;
+    if (logo) startup.logo = logo;
+    if (banner) startup.banner = banner;
     startup.roles = Array.isArray(roles) ? roles : startup.roles;
-    startup.updatedAt = new Date().toISOString();
+    await startup.save();
 
-    res.json({
-      message: 'Startup updated successfully',
-      startup
-    });
-
+    res.json({ message: 'Startup updated successfully', startup });
   } catch (error) {
     console.error('Update startup error:', error);
-    res.status(500).json({
-      error: 'Update Failed',
-      message: 'Failed to update startup'
-    });
+    res.status(500).json({ error: 'Update Failed', message: 'Failed to update startup' });
   }
 });
 
@@ -328,48 +168,25 @@ router.put('/:id', authenticateToken, startupValidation.registerStartup, (req, r
  * @desc    Delete startup (only creator can delete)
  * @access  Private
  */
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user;
 
-    const startupIndex = startups.findIndex(s => s.id === id);
-    if (startupIndex === -1) {
-      return res.status(404).json({
-        error: 'Startup Not Found',
-        message: 'Startup not found'
-      });
-    }
+    const startup = await Startup.findById(id);
+    if (!startup) return res.status(404).json({ error: 'Startup Not Found', message: 'Startup not found' });
+    if (startup.creator.id.toString() !== userId) return res.status(403).json({ error: 'Forbidden', message: 'Only the startup creator can delete the startup' });
 
-    const startup = startups[startupIndex];
+    await Startup.findByIdAndDelete(id);
+    await Promise.all([
+      StartupMember.deleteMany({ startupId: id }),
+      JoinRequest.deleteMany({ startupId: id })
+    ]);
 
-    // Check if user is the creator
-    if (startup.creator.id !== userId) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only the startup creator can delete the startup'
-      });
-    }
-
-    // Delete startup
-    startups.splice(startupIndex, 1);
-
-    // Remove startup members
-    startupMembers = startupMembers.filter(m => m.startupId !== id);
-
-    // Remove join requests
-    joinRequests = joinRequests.filter(r => r.startupId !== id);
-
-    res.json({
-      message: 'Startup deleted successfully'
-    });
-
+    res.json({ message: 'Startup deleted successfully' });
   } catch (error) {
     console.error('Delete startup error:', error);
-    res.status(500).json({
-      error: 'Deletion Failed',
-      message: 'Failed to delete startup'
-    });
+    res.status(500).json({ error: 'Deletion Failed', message: 'Failed to delete startup' });
   }
 });
 
@@ -378,42 +195,22 @@ router.delete('/:id', authenticateToken, (req, res) => {
  * @desc    Submit join request for startup
  * @access  Private
  */
-router.post('/:id/join-request', authenticateToken, (req, res) => {
+router.post('/:id/join-request', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId, firstName, lastName } = req.user;
     const { message, role } = req.body;
 
-    const startup = startups.find(s => s.id === id);
-    if (!startup) {
-      return res.status(404).json({
-        error: 'Startup Not Found',
-        message: 'Startup not found'
-      });
-    }
+    const startup = await Startup.findById(id);
+    if (!startup) return res.status(404).json({ error: 'Startup Not Found', message: 'Startup not found' });
 
-    // Check if user is already a member
-    const existingMember = startup.members.find(m => m.userId === userId);
-    if (existingMember) {
-      return res.status(400).json({
-        error: 'Already a Member',
-        message: 'You are already a member of this startup'
-      });
-    }
+    const existingMember = startup.members.find(m => m.userId?.toString() === userId);
+    if (existingMember) return res.status(400).json({ error: 'Already a Member', message: 'You are already a member of this startup' });
 
-    // Check if user already has a pending request
-    const existingRequest = joinRequests.find(r => 
-      r.startupId === id && r.userId === userId && r.status === 'pending'
-    );
-    if (existingRequest) {
-      return res.status(400).json({
-        error: 'Request Already Pending',
-        message: 'You already have a pending join request for this startup'
-      });
-    }
+    const existingRequest = await JoinRequest.findOne({ startupId: id, userId, status: 'pending' });
+    if (existingRequest) return res.status(400).json({ error: 'Request Already Pending', message: 'You already have a pending join request for this startup' });
 
-    const newJoinRequest = {
-      id: Date.now().toString(),
+    const joinRequest = await JoinRequest.create({
       startupId: id,
       startupName: startup.name,
       userId,
@@ -421,27 +218,15 @@ router.post('/:id/join-request', authenticateToken, (req, res) => {
       lastName,
       message: message || '',
       role: role || 'member',
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    joinRequests.push(newJoinRequest);
+      status: 'pending'
+    });
 
     // TODO: Send notification to startup creator
-    // This will be implemented when notifications are set up
 
-    res.status(201).json({
-      message: 'Join request submitted successfully',
-      joinRequest: newJoinRequest
-    });
-
+    res.status(201).json({ message: 'Join request submitted successfully', joinRequest });
   } catch (error) {
     console.error('Submit join request error:', error);
-    res.status(500).json({
-      error: 'Request Failed',
-      message: 'Failed to submit join request'
-    });
+    res.status(500).json({ error: 'Request Failed', message: 'Failed to submit join request' });
   }
 });
 
@@ -450,39 +235,20 @@ router.post('/:id/join-request', authenticateToken, (req, res) => {
  * @desc    Get join requests for startup (only creator can see)
  * @access  Private
  */
-router.get('/:id/join-requests', authenticateToken, (req, res) => {
+router.get('/:id/join-requests', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user;
 
-    const startup = startups.find(s => s.id === id);
-    if (!startup) {
-      return res.status(404).json({
-        error: 'Startup Not Found',
-        message: 'Startup not found'
-      });
-    }
+    const startup = await Startup.findById(id);
+    if (!startup) return res.status(404).json({ error: 'Startup Not Found', message: 'Startup not found' });
+    if (startup.creator.id.toString() !== userId) return res.status(403).json({ error: 'Forbidden', message: 'Only the startup creator can view join requests' });
 
-    // Check if user is the creator
-    if (startup.creator.id !== userId) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only the startup creator can view join requests'
-      });
-    }
-
-    const startupJoinRequests = joinRequests.filter(r => r.startupId === id);
-
-    res.json({
-      joinRequests: startupJoinRequests
-    });
-
+    const startupJoinRequests = await JoinRequest.find({ startupId: id });
+    res.json({ joinRequests: startupJoinRequests });
   } catch (error) {
     console.error('Get join requests error:', error);
-    res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch join requests'
-    });
+    res.status(500).json({ error: 'Fetch Failed', message: 'Failed to fetch join requests' });
   }
 });
 
@@ -491,84 +257,42 @@ router.get('/:id/join-requests', authenticateToken, (req, res) => {
  * @desc    Approve/reject join request (only creator can do this)
  * @access  Private
  */
-router.put('/:id/join-requests/:requestId', authenticateToken, (req, res) => {
+router.put('/:id/join-requests/:requestId', authenticateToken, async (req, res) => {
   try {
     const { id, requestId } = req.params;
     const { userId } = req.user;
     const { status } = req.body;
 
     if (!['approved', 'rejected'].includes(status)) {
-      return res.status(400).json({
-        error: 'Invalid Status',
-        message: 'Status must be either "approved" or "rejected"'
-      });
+      return res.status(400).json({ error: 'Invalid Status', message: 'Status must be either "approved" or "rejected"' });
     }
 
-    const startup = startups.find(s => s.id === id);
-    if (!startup) {
-      return res.status(404).json({
-        error: 'Startup Not Found',
-        message: 'Startup not found'
-      });
-    }
+    const startup = await Startup.findById(id);
+    if (!startup) return res.status(404).json({ error: 'Startup Not Found', message: 'Startup not found' });
+    if (startup.creator.id.toString() !== userId) return res.status(403).json({ error: 'Forbidden', message: 'Only the startup creator can approve/reject join requests' });
 
-    // Check if user is the creator
-    if (startup.creator.id !== userId) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only the startup creator can approve/reject join requests'
-      });
-    }
-
-    const joinRequest = joinRequests.find(r => r.id === requestId && r.startupId === id);
-    if (!joinRequest) {
-      return res.status(404).json({
-        error: 'Join Request Not Found',
-        message: 'Join request not found'
-      });
-    }
+    const joinRequest = await JoinRequest.findOne({ _id: requestId, startupId: id });
+    if (!joinRequest) return res.status(404).json({ error: 'Join Request Not Found', message: 'Join request not found' });
 
     joinRequest.status = status;
-    joinRequest.updatedAt = new Date().toISOString();
+    joinRequest.updatedAt = new Date();
+    await joinRequest.save();
 
     if (status === 'approved') {
-      // Add user to startup members
-      const newMember = {
-        startupId: id,
-        userId: joinRequest.userId,
-        firstName: joinRequest.firstName,
-        lastName: joinRequest.lastName,
-        role: joinRequest.role,
-        joinedAt: new Date().toISOString(),
-        isActive: true
-      };
-
-      startupMembers.push(newMember);
-      startup.members.push({
-        userId: joinRequest.userId,
-        firstName: joinRequest.firstName,
-        lastName: joinRequest.lastName,
-        role: joinRequest.role,
-        joinedAt: new Date().toISOString(),
-        isActive: true
+      const newMember = { startupId: id, userId: joinRequest.userId, firstName: joinRequest.firstName, lastName: joinRequest.lastName, role: joinRequest.role, joinedAt: new Date(), isActive: true };
+      await StartupMember.create(newMember);
+      await Startup.findByIdAndUpdate(id, { 
+        $push: { members: { userId: joinRequest.userId, firstName: joinRequest.firstName, lastName: joinRequest.lastName, role: joinRequest.role, joinedAt: new Date(), isActive: true } },
+        $inc: { memberCount: 1 }
       });
-      startup.memberCount += 1;
     }
 
     // TODO: Send notification to request author
-    // This will be implemented when notifications are set up
 
-    res.json({
-      message: `Join request ${status} successfully`,
-      joinRequest
-    });
-
+    res.json({ message: `Join request ${status} successfully`, joinRequest });
   } catch (error) {
     console.error('Update join request error:', error);
-    res.status(500).json({
-      error: 'Update Failed',
-      message: 'Failed to update join request status'
-    });
+    res.status(500).json({ error: 'Update Failed', message: 'Failed to update join request status' });
   }
 });
 
@@ -577,37 +301,21 @@ router.put('/:id/join-requests/:requestId', authenticateToken, (req, res) => {
  * @desc    Get user's startup memberships
  * @access  Private
  */
-router.get('/user/memberships', authenticateToken, (req, res) => {
+router.get('/user/memberships', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
-
-    const userMemberships = startupMembers.filter(m => m.userId === userId);
-    const userStartups = userMemberships.map(membership => {
-      const startup = startups.find(s => s.id === membership.startupId);
-      return {
-        ...membership,
-        startup: startup ? {
-          id: startup.id,
-          name: startup.name,
-          industry: startup.industry,
-          location: startup.location,
-          stage: startup.stage,
-          logo: startup.logo,
-          banner: startup.banner
-        } : null
-      };
-    });
-
-    res.json({
-      memberships: userStartups
-    });
-
+    const memberships = await StartupMember.find({ userId });
+    const startupIds = memberships.map(m => m.startupId);
+    const startups = await Startup.find({ _id: { $in: startupIds } }).select('name industry location stage logo banner');
+    const startupMap = new Map(startups.map(s => [s._id.toString(), s]));
+    const userStartups = memberships.map(m => ({
+      ...m.toObject(),
+      startup: startupMap.get(m.startupId.toString()) || null
+    }));
+    res.json({ memberships: userStartups });
   } catch (error) {
     console.error('Get memberships error:', error);
-    res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch user memberships'
-    });
+    res.status(500).json({ error: 'Fetch Failed', message: 'Failed to fetch user memberships' });
   }
 });
 

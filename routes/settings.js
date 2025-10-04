@@ -2,7 +2,7 @@ const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
 const { profileValidation, authValidation } = require('../middleware/validation');
 const { hashPassword, comparePassword } = require('../utils/password');
-const { findInCollection, getCollection, updateItemInCollection } = require('../utils/dataPersistence');
+const { User } = require('../models/schemas');
 
 const router = express.Router();
 
@@ -13,11 +13,11 @@ const router = express.Router();
  * @desc    Get user profile settings
  * @access  Private
  */
-router.get('/profile', authenticateToken, (req, res) => {
+router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = findInCollection('users', u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -53,12 +53,12 @@ router.get('/profile', authenticateToken, (req, res) => {
  * @desc    Update user profile settings
  * @access  Private
  */
-router.put('/profile', authenticateToken, profileValidation.updateProfile, (req, res) => {
+router.put('/profile', authenticateToken, profileValidation.updateProfile, async (req, res) => {
   try {
     const { userId } = req.user;
     const { firstName, lastName, bio, company, socialLinks } = req.body;
 
-    const user = findInCollection('users', u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -66,30 +66,23 @@ router.put('/profile', authenticateToken, profileValidation.updateProfile, (req,
       });
     }
 
-    const newProfile = { ...user.profile };
+    const newProfile = { ...(user.profile?.toObject ? user.profile.toObject() : user.profile) };
     if (bio !== undefined) newProfile.bio = bio;
     if (company !== undefined) newProfile.company = company;
-    if (socialLinks !== undefined) {
-      newProfile.socialLinks = { ...(user.profile?.socialLinks || {}), ...socialLinks };
-    }
+    if (socialLinks !== undefined) newProfile.socialLinks = { ...(user.profile?.socialLinks || {}), ...socialLinks };
 
-    const updates = {
-      updatedAt: new Date().toISOString(),
-      ...(firstName !== undefined ? { firstName } : {}),
-      ...(lastName !== undefined ? { lastName } : {}),
-      profile: newProfile
-    };
+    if (firstName !== undefined) user.firstName = firstName;
+    if (lastName !== undefined) user.lastName = lastName;
+    user.profile = newProfile;
+    await user.save();
 
-    updateItemInCollection('users', userId, updates);
-
-    const refreshed = findInCollection('users', u => u.id === userId);
     const profileData = {
-      firstName: refreshed.firstName,
-      lastName: refreshed.lastName,
-      email: refreshed.email,
-      profile: refreshed.profile,
-      createdAt: refreshed.createdAt,
-      updatedAt: refreshed.updatedAt
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      profile: user.profile,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
     };
 
     res.json({
@@ -111,7 +104,7 @@ router.put('/profile', authenticateToken, profileValidation.updateProfile, (req,
  * @desc    Update user profile picture
  * @access  Private
  */
-router.post('/profile/picture', authenticateToken, (req, res) => {
+router.post('/profile/picture', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const { pictureUrl } = req.body;
@@ -123,7 +116,7 @@ router.post('/profile/picture', authenticateToken, (req, res) => {
       });
     }
 
-    const user = findInCollection('users', u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -131,11 +124,8 @@ router.post('/profile/picture', authenticateToken, (req, res) => {
       });
     }
 
-    // Update profile picture
-    updateItemInCollection('users', userId, {
-      profile: { ...user.profile, picture: pictureUrl },
-      updatedAt: new Date().toISOString()
-    });
+    user.profile = { ...(user.profile?.toObject ? user.profile.toObject() : user.profile), picture: pictureUrl };
+    await user.save();
 
     res.json({
       message: 'Profile picture updated successfully',
@@ -156,11 +146,11 @@ router.post('/profile/picture', authenticateToken, (req, res) => {
  * @desc    Remove user profile picture
  * @access  Private
  */
-router.delete('/profile/picture', authenticateToken, (req, res) => {
+router.delete('/profile/picture', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = findInCollection('users', u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -168,11 +158,8 @@ router.delete('/profile/picture', authenticateToken, (req, res) => {
       });
     }
 
-    // Remove profile picture
-    updateItemInCollection('users', userId, {
-      profile: { ...user.profile, picture: null },
-      updatedAt: new Date().toISOString()
-    });
+    user.profile = { ...(user.profile?.toObject ? user.profile.toObject() : user.profile), picture: null };
+    await user.save();
 
     res.json({
       message: 'Profile picture removed successfully'
@@ -192,11 +179,11 @@ router.delete('/profile/picture', authenticateToken, (req, res) => {
  * @desc    Get account and security settings
  * @access  Private
  */
-router.get('/account', authenticateToken, (req, res) => {
+router.get('/account', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = findInCollection('users', u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -235,7 +222,7 @@ router.post('/account/change-password', authenticateToken, authValidation.change
     const { userId } = req.user;
     const { currentPassword, newPassword } = req.body;
 
-    const user = findInCollection('users', u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -256,10 +243,8 @@ router.post('/account/change-password', authenticateToken, authValidation.change
     const hashedNewPassword = await hashPassword(newPassword);
 
     // Update password
-    updateItemInCollection('users', userId, {
-      password: hashedNewPassword,
-      updatedAt: new Date().toISOString()
-    });
+    user.password = hashedNewPassword;
+    await user.save();
 
     res.json({
       message: 'Password changed successfully'
@@ -279,7 +264,7 @@ router.post('/account/change-password', authenticateToken, authValidation.change
  * @desc    Change user email
  * @access  Private
  */
-router.post('/account/change-email', authenticateToken, (req, res) => {
+router.post('/account/change-email', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const { newEmail, password } = req.body;
@@ -309,8 +294,7 @@ router.post('/account/change-email', authenticateToken, (req, res) => {
     }
 
     // Check if new email already exists
-    const allUsers = getCollection('users');
-    const existingUser = allUsers.find(u => u.email === newEmail && u.id !== userId);
+    const existingUser = await User.findOne({ email: newEmail, _id: { $ne: userId } });
     if (existingUser) {
       return res.status(400).json({
         error: 'Email Already Exists',
@@ -319,28 +303,18 @@ router.post('/account/change-email', authenticateToken, (req, res) => {
     }
 
     // Verify password
-    comparePassword(password, user.password).then(isValid => {
-      if (!isValid) {
-        return res.status(400).json({
-          error: 'Invalid Password',
-          message: 'Password is incorrect'
-        });
-      }
+    const isValid = await comparePassword(password, user.password);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Invalid Password', message: 'Password is incorrect' });
+    }
 
-      // Update email
-      updateItemInCollection('users', userId, {
-        email: newEmail,
-        isEmailVerified: false,
-        updatedAt: new Date().toISOString()
-      });
+    user.email = newEmail;
+    user.isEmailVerified = false;
+    await user.save();
 
-      // TODO: Send verification email to new email address
-      // This will be implemented when email service is set up
+    // TODO: Send verification email to new email address
 
-      res.json({
-        message: 'Email changed successfully. Please verify your new email address.'
-      });
-    });
+    res.json({ message: 'Email changed successfully. Please verify your new email address.' });
 
   } catch (error) {
     console.error('Change email error:', error);
@@ -356,7 +330,7 @@ router.post('/account/change-email', authenticateToken, (req, res) => {
  * @desc    Delete user account
  * @access  Private
  */
-router.post('/account/delete-account', authenticateToken, (req, res) => {
+router.post('/account/delete-account', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const { password, confirmation } = req.body;
@@ -384,24 +358,14 @@ router.post('/account/delete-account', authenticateToken, (req, res) => {
     }
 
     // Verify password
-    comparePassword(password, user.password).then(isValid => {
-      if (!isValid) {
-        return res.status(400).json({
-          error: 'Invalid Password',
-          message: 'Password is incorrect'
-        });
-      }
+    const isValid = await comparePassword(password, user.password);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Invalid Password', message: 'Password is incorrect' });
+    }
 
-      // Mark as deleted in persistence
-      updateItemInCollection('users', userId, {
-        status: 'deleted',
-        updatedAt: new Date().toISOString()
-      });
-
-      res.json({
-        message: 'Account deletion request submitted successfully'
-      });
-    });
+    user.status = 'deleted';
+    await user.save();
+    res.json({ message: 'Account deletion request submitted successfully' });
 
   } catch (error) {
     console.error('Delete account error:', error);
@@ -417,11 +381,11 @@ router.post('/account/delete-account', authenticateToken, (req, res) => {
  * @desc    Get user preferences
  * @access  Private
  */
-router.get('/preferences', authenticateToken, (req, res) => {
+router.get('/preferences', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = findInCollection('users', u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -457,7 +421,7 @@ router.get('/preferences', authenticateToken, (req, res) => {
  * @desc    Update user preferences
  * @access  Private
  */
-router.put('/preferences', authenticateToken, (req, res) => {
+router.put('/preferences', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const { 
@@ -469,7 +433,7 @@ router.put('/preferences', authenticateToken, (req, res) => {
       theme 
     } = req.body;
 
-    const user = findInCollection('users', u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -477,7 +441,7 @@ router.put('/preferences', authenticateToken, (req, res) => {
       });
     }
 
-    const newPrefs = { ...(user.preferences || {}) };
+    const newPrefs = { ...(user.preferences?.toObject ? user.preferences.toObject() : user.preferences) };
     if (emailNotifications !== undefined) newPrefs.emailNotifications = emailNotifications;
     if (pushNotifications !== undefined) newPrefs.pushNotifications = pushNotifications;
     if (privacy !== undefined) newPrefs.privacy = privacy;
@@ -485,15 +449,10 @@ router.put('/preferences', authenticateToken, (req, res) => {
     if (timezone !== undefined) newPrefs.timezone = timezone;
     if (theme !== undefined) newPrefs.theme = theme;
 
-    updateItemInCollection('users', userId, {
-      preferences: newPrefs,
-      updatedAt: new Date().toISOString()
-    });
+    user.preferences = newPrefs;
+    await user.save();
 
-    res.json({
-      message: 'Preferences updated successfully',
-      preferences: newPrefs
-    });
+    res.json({ message: 'Preferences updated successfully', preferences: newPrefs });
 
   } catch (error) {
     console.error('Update preferences error:', error);
@@ -509,11 +468,11 @@ router.put('/preferences', authenticateToken, (req, res) => {
  * @desc    Get notification settings
  * @access  Private
  */
-router.get('/notifications', authenticateToken, (req, res) => {
+router.get('/notifications', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = findInCollection('users', u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -552,12 +511,12 @@ router.get('/notifications', authenticateToken, (req, res) => {
  * @desc    Update notification settings
  * @access  Private
  */
-router.put('/notifications', authenticateToken, (req, res) => {
+router.put('/notifications', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const notificationSettings = req.body;
 
-    const user = findInCollection('users', u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -565,16 +524,11 @@ router.put('/notifications', authenticateToken, (req, res) => {
       });
     }
 
-    const newNotif = { ...(user.notificationSettings || {}), ...notificationSettings };
-    updateItemInCollection('users', userId, {
-      notificationSettings: newNotif,
-      updatedAt: new Date().toISOString()
-    });
+    const newNotif = { ...(user.notificationSettings?.toObject ? user.notificationSettings.toObject() : user.notificationSettings), ...notificationSettings };
+    user.notificationSettings = newNotif;
+    await user.save();
 
-    res.json({
-      message: 'Notification settings updated successfully',
-      notificationSettings: newNotif
-    });
+    res.json({ message: 'Notification settings updated successfully', notificationSettings: newNotif });
 
   } catch (error) {
     console.error('Update notification settings error:', error);
