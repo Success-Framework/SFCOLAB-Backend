@@ -4,13 +4,7 @@ const { authenticateToken, authenticateRefreshToken } = require('../middleware/a
 const { authValidation } = require('../middleware/validation');
 const { generateTokens } = require('../utils/jwt');
 const { hashPassword, comparePassword } = require('../utils/password');
-const { 
-  getCollection, 
-  addToCollection, 
-  updateItemInCollection, 
-  findInCollection,
-  updateCollection 
-} = require('../utils/dataPersistence');
+const { User, RefreshToken } = require('../models/schemas');
 
 const router = express.Router();
 
@@ -24,7 +18,7 @@ router.post('/signup', authValidation.signup, async (req, res) => {
     const { firstName, lastName, email, password } = req.body;
 
     // Check if user already exists
-    const existingUser = findInCollection('users', user => user.email === email);
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
         error: 'User Already Exists',
@@ -35,48 +29,39 @@ router.post('/signup', authValidation.signup, async (req, res) => {
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create new user
-    const newUser = {
-      id: Date.now().toString(),
+    // Create and save new user
+    const userDoc = new User({
       firstName,
       lastName,
       email,
       password: hashedPassword,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
       isEmailVerified: false,
-      profile: {
-        picture: null,
-        bio: null,
-        company: null,
-        socialLinks: {}
-      }
-    };
-
-    // Add user to collection
-    addToCollection('users', newUser);
+      profile: { picture: null, bio: null, company: null, socialLinks: {} },
+    });
+    await userDoc.save();
 
     // Generate tokens
     const tokens = generateTokens({
-      userId: newUser.id,
-      email: newUser.email,
-      firstName: newUser.firstName,
-      lastName: newUser.lastName
+      userId: userDoc._id.toString(),
+      email: userDoc.email,
+      firstName: userDoc.firstName,
+      lastName: userDoc.lastName
     });
 
     // Store refresh token
-    addToCollection('refreshTokens', {
-      userId: newUser.id,
+    await RefreshToken.create({
+      userId: userDoc._id,
       token: tokens.refreshToken,
-      createdAt: new Date().toISOString()
+      createdAt: new Date()
     });
 
     // Remove password from response
-    const { password: _, ...userWithoutPassword } = newUser;
+    const user = userDoc.toObject();
+    delete user.password;
 
     res.status(201).json({
       message: 'User registered successfully',
-      user: userWithoutPassword,
+      user,
       tokens
     });
 
@@ -99,8 +84,8 @@ router.post('/login', authValidation.login, async (req, res) => {
     const { email, password } = req.body;
 
     // Find user by email
-    const user = findInCollection('users', u => u.email === email);
-    if (!user) {
+    const userDoc = await User.findOne({ email });
+    if (!userDoc) {
       return res.status(401).json({
         error: 'Invalid Credentials',
         message: 'Email or password is incorrect'
@@ -108,7 +93,7 @@ router.post('/login', authValidation.login, async (req, res) => {
     }
 
     // Verify password
-    const isPasswordValid = await comparePassword(password, user.password);
+    const isPasswordValid = await comparePassword(password, userDoc.password);
     if (!isPasswordValid) {
       return res.status(401).json({
         error: 'Invalid Credentials',
@@ -116,27 +101,32 @@ router.post('/login', authValidation.login, async (req, res) => {
       });
     }
 
+    // Optionally update lastLogin
+    userDoc.lastLogin = new Date();
+    await userDoc.save();
+
     // Generate tokens
     const tokens = generateTokens({
-      userId: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName
+      userId: userDoc._id.toString(),
+      email: userDoc.email,
+      firstName: userDoc.firstName,
+      lastName: userDoc.lastName
     });
 
     // Store refresh token
-    addToCollection('refreshTokens', {
-      userId: user.id,
+    await RefreshToken.create({
+      userId: userDoc._id,
       token: tokens.refreshToken,
-      createdAt: new Date().toISOString()
+      createdAt: new Date()
     });
 
     // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
+    const user = userDoc.toObject();
+    delete user.password;
 
     res.json({
       message: 'Login successful',
-      user: userWithoutPassword,
+      user,
       tokens
     });
 
@@ -154,13 +144,13 @@ router.post('/login', authValidation.login, async (req, res) => {
  * @desc    Refresh access token
  * @access  Public
  */
-router.post('/refresh', authenticateRefreshToken, (req, res) => {
+router.post('/refresh', authenticateRefreshToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
     // Find user
-    const user = findInCollection('users', u => u.id === userId);
-    if (!user) {
+    const userDoc = await User.findById(userId);
+    if (!userDoc) {
       return res.status(404).json({
         error: 'User Not Found',
         message: 'User not found'
@@ -169,23 +159,18 @@ router.post('/refresh', authenticateRefreshToken, (req, res) => {
 
     // Generate new tokens
     const tokens = generateTokens({
-      userId: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName
+      userId: userDoc._id.toString(),
+      email: userDoc.email,
+      firstName: userDoc.firstName,
+      lastName: userDoc.lastName
     });
 
-    // Update refresh token
-    const refreshTokens = getCollection('refreshTokens');
-    const tokenIndex = refreshTokens.findIndex(rt => rt.userId === userId);
-    if (tokenIndex !== -1) {
-      refreshTokens[tokenIndex] = {
-        userId: user.id,
-        token: tokens.refreshToken,
-        createdAt: new Date().toISOString()
-      };
-      updateCollection('refreshTokens', refreshTokens);
-    }
+    // Upsert refresh token for this user
+    await RefreshToken.findOneAndUpdate(
+      { userId: userDoc._id },
+      { token: tokens.refreshToken, createdAt: new Date() },
+      { upsert: true, new: true }
+    );
 
     res.json({
       message: 'Token refreshed successfully',
@@ -206,14 +191,12 @@ router.post('/refresh', authenticateRefreshToken, (req, res) => {
  * @desc    User logout
  * @access  Private
  */
-router.post('/logout', authenticateToken, (req, res) => {
+router.post('/logout', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    // Remove refresh token
-    const refreshTokens = getCollection('refreshTokens');
-    const filteredTokens = refreshTokens.filter(rt => rt.userId !== userId);
-    updateCollection('refreshTokens', filteredTokens);
+    // Remove refresh tokens for this user
+    await RefreshToken.deleteMany({ userId });
 
     res.json({
       message: 'Logout successful'
@@ -233,14 +216,12 @@ router.post('/logout', authenticateToken, (req, res) => {
  * @desc    Logout from all devices
  * @access  Private
  */
-router.post('/logout-all', authenticateToken, (req, res) => {
+router.post('/logout-all', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
     // Remove all refresh tokens for this user
-    const refreshTokens = getCollection('refreshTokens');
-    const filteredTokens = refreshTokens.filter(rt => rt.userId !== userId);
-    updateCollection('refreshTokens', filteredTokens);
+    await RefreshToken.deleteMany({ userId });
 
     res.json({
       message: 'Logged out from all devices successfully'
@@ -260,12 +241,12 @@ router.post('/logout-all', authenticateToken, (req, res) => {
  * @desc    Get current user profile
  * @access  Private
  */
-router.get('/me', authenticateToken, (req, res) => {
+router.get('/me', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = findInCollection('users', u => u.id === userId);
-    if (!user) {
+    const userDoc = await User.findById(userId);
+    if (!userDoc) {
       return res.status(404).json({
         error: 'User Not Found',
         message: 'User not found'
@@ -273,10 +254,11 @@ router.get('/me', authenticateToken, (req, res) => {
     }
 
     // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
+    const user = userDoc.toObject();
+    delete user.password;
 
     res.json({
-      user: userWithoutPassword
+      user
     });
 
   } catch (error) {
@@ -298,8 +280,8 @@ router.post('/change-password', authenticateToken, authValidation.changePassword
     const { userId } = req.user;
     const { currentPassword, newPassword } = req.body;
 
-    const user = findInCollection('users', u => u.id === userId);
-    if (!user) {
+    const userDoc = await User.findById(userId);
+    if (!userDoc) {
       return res.status(404).json({
         error: 'User Not Found',
         message: 'User not found'
@@ -307,7 +289,7 @@ router.post('/change-password', authenticateToken, authValidation.changePassword
     }
 
     // Verify current password
-    const isCurrentPasswordValid = await comparePassword(currentPassword, user.password);
+    const isCurrentPasswordValid = await comparePassword(currentPassword, userDoc.password);
     if (!isCurrentPasswordValid) {
       return res.status(400).json({
         error: 'Invalid Password',
@@ -319,15 +301,11 @@ router.post('/change-password', authenticateToken, authValidation.changePassword
     const hashedNewPassword = await hashPassword(newPassword);
 
     // Update password
-    updateItemInCollection('users', userId, {
-      password: hashedNewPassword,
-      updatedAt: new Date().toISOString()
-    });
+    userDoc.password = hashedNewPassword;
+    await userDoc.save();
 
     // Remove refresh tokens (force re-login)
-    const refreshTokens = getCollection('refreshTokens');
-    const filteredTokens = refreshTokens.filter(rt => rt.userId !== userId);
-    updateCollection('refreshTokens', filteredTokens);
+    await RefreshToken.deleteMany({ userId });
 
     res.json({
       message: 'Password changed successfully. Please login again.'

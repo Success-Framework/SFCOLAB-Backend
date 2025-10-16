@@ -4,7 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
-const { initializeData } = require('./utils/dataPersistence');
+const { connectMongo } = require('./db/mongoose');
 const authRoutes = require('./routes/auth');
 const ideationRoutes = require('./routes/ideation');
 const startupRoutes = require('./routes/startup');
@@ -130,15 +130,21 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize data persistence
-initializeData();
+// Connect to MongoDB then start server
+(async () => {
+  try {
+    const conn = await connectMongo();
+    console.log(`🗄️  MongoDB connected: ${conn.host}`);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 SFCollab Backend server running on port ${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-  console.log(`💾 Data persistence: JSON file storage initialized`);
-});
+    app.listen(PORT, () => {
+      console.log(`🚀 SFCollab Backend server running on port ${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+    });
+  } catch (err) {
+    console.error('Failed to connect to MongoDB:', err);
+    process.exit(1);
+  }
+})();
 
 module.exports = app;

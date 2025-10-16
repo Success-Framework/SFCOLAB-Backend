@@ -2,22 +2,22 @@ const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
 const { profileValidation, authValidation } = require('../middleware/validation');
 const { hashPassword, comparePassword } = require('../utils/password');
+const { User } = require('../models/schemas');
 
 const router = express.Router();
 
-// Import user data from auth routes (replace with database operations later)
-const { users } = require('./auth');
+// Users are stored in JSON persistence via dataPersistence utils
 
 /**
  * @route   GET /api/settings/profile
  * @desc    Get user profile settings
  * @access  Private
  */
-router.get('/profile', authenticateToken, (req, res) => {
+router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -53,12 +53,12 @@ router.get('/profile', authenticateToken, (req, res) => {
  * @desc    Update user profile settings
  * @access  Private
  */
-router.put('/profile', authenticateToken, profileValidation.updateProfile, (req, res) => {
+router.put('/profile', authenticateToken, profileValidation.updateProfile, async (req, res) => {
   try {
     const { userId } = req.user;
     const { firstName, lastName, bio, company, socialLinks } = req.body;
 
-    const user = users.find(u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -66,21 +66,16 @@ router.put('/profile', authenticateToken, profileValidation.updateProfile, (req,
       });
     }
 
-    // Update profile fields
+    const newProfile = { ...(user.profile?.toObject ? user.profile.toObject() : user.profile) };
+    if (bio !== undefined) newProfile.bio = bio;
+    if (company !== undefined) newProfile.company = company;
+    if (socialLinks !== undefined) newProfile.socialLinks = { ...(user.profile?.socialLinks || {}), ...socialLinks };
+
     if (firstName !== undefined) user.firstName = firstName;
     if (lastName !== undefined) user.lastName = lastName;
-    if (bio !== undefined) user.profile.bio = bio;
-    if (company !== undefined) user.profile.company = company;
-    if (socialLinks !== undefined) {
-      user.profile.socialLinks = {
-        ...user.profile.socialLinks,
-        ...socialLinks
-      };
-    }
+    user.profile = newProfile;
+    await user.save();
 
-    user.updatedAt = new Date().toISOString();
-
-    // Return updated profile data
     const profileData = {
       firstName: user.firstName,
       lastName: user.lastName,
@@ -109,7 +104,7 @@ router.put('/profile', authenticateToken, profileValidation.updateProfile, (req,
  * @desc    Update user profile picture
  * @access  Private
  */
-router.post('/profile/picture', authenticateToken, (req, res) => {
+router.post('/profile/picture', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const { pictureUrl } = req.body;
@@ -121,7 +116,7 @@ router.post('/profile/picture', authenticateToken, (req, res) => {
       });
     }
 
-    const user = users.find(u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -129,9 +124,8 @@ router.post('/profile/picture', authenticateToken, (req, res) => {
       });
     }
 
-    // Update profile picture
-    user.profile.picture = pictureUrl;
-    user.updatedAt = new Date().toISOString();
+    user.profile = { ...(user.profile?.toObject ? user.profile.toObject() : user.profile), picture: pictureUrl };
+    await user.save();
 
     res.json({
       message: 'Profile picture updated successfully',
@@ -152,11 +146,11 @@ router.post('/profile/picture', authenticateToken, (req, res) => {
  * @desc    Remove user profile picture
  * @access  Private
  */
-router.delete('/profile/picture', authenticateToken, (req, res) => {
+router.delete('/profile/picture', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -164,9 +158,8 @@ router.delete('/profile/picture', authenticateToken, (req, res) => {
       });
     }
 
-    // Remove profile picture
-    user.profile.picture = null;
-    user.updatedAt = new Date().toISOString();
+    user.profile = { ...(user.profile?.toObject ? user.profile.toObject() : user.profile), picture: null };
+    await user.save();
 
     res.json({
       message: 'Profile picture removed successfully'
@@ -186,11 +179,11 @@ router.delete('/profile/picture', authenticateToken, (req, res) => {
  * @desc    Get account and security settings
  * @access  Private
  */
-router.get('/account', authenticateToken, (req, res) => {
+router.get('/account', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -229,7 +222,7 @@ router.post('/account/change-password', authenticateToken, authValidation.change
     const { userId } = req.user;
     const { currentPassword, newPassword } = req.body;
 
-    const user = users.find(u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -251,7 +244,7 @@ router.post('/account/change-password', authenticateToken, authValidation.change
 
     // Update password
     user.password = hashedNewPassword;
-    user.updatedAt = new Date().toISOString();
+    await user.save();
 
     res.json({
       message: 'Password changed successfully'
@@ -271,7 +264,7 @@ router.post('/account/change-password', authenticateToken, authValidation.change
  * @desc    Change user email
  * @access  Private
  */
-router.post('/account/change-email', authenticateToken, (req, res) => {
+router.post('/account/change-email', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const { newEmail, password } = req.body;
@@ -292,7 +285,7 @@ router.post('/account/change-email', authenticateToken, (req, res) => {
       });
     }
 
-    const user = users.find(u => u.id === userId);
+    const user = findInCollection('users', u => u.id === userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -301,7 +294,7 @@ router.post('/account/change-email', authenticateToken, (req, res) => {
     }
 
     // Check if new email already exists
-    const existingUser = users.find(u => u.email === newEmail && u.id !== userId);
+    const existingUser = await User.findOne({ email: newEmail, _id: { $ne: userId } });
     if (existingUser) {
       return res.status(400).json({
         error: 'Email Already Exists',
@@ -310,26 +303,18 @@ router.post('/account/change-email', authenticateToken, (req, res) => {
     }
 
     // Verify password
-    comparePassword(password, user.password).then(isValid => {
-      if (!isValid) {
-        return res.status(400).json({
-          error: 'Invalid Password',
-          message: 'Password is incorrect'
-        });
-      }
+    const isValid = await comparePassword(password, user.password);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Invalid Password', message: 'Password is incorrect' });
+    }
 
-      // Update email
-      user.email = newEmail;
-      user.isEmailVerified = false; // Reset email verification
-      user.updatedAt = new Date().toISOString();
+    user.email = newEmail;
+    user.isEmailVerified = false;
+    await user.save();
 
-      // TODO: Send verification email to new email address
-      // This will be implemented when email service is set up
+    // TODO: Send verification email to new email address
 
-      res.json({
-        message: 'Email changed successfully. Please verify your new email address.'
-      });
-    });
+    res.json({ message: 'Email changed successfully. Please verify your new email address.' });
 
   } catch (error) {
     console.error('Change email error:', error);
@@ -345,7 +330,7 @@ router.post('/account/change-email', authenticateToken, (req, res) => {
  * @desc    Delete user account
  * @access  Private
  */
-router.post('/account/delete-account', authenticateToken, (req, res) => {
+router.post('/account/delete-account', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const { password, confirmation } = req.body;
@@ -373,24 +358,14 @@ router.post('/account/delete-account', authenticateToken, (req, res) => {
     }
 
     // Verify password
-    comparePassword(password, user.password).then(isValid => {
-      if (!isValid) {
-        return res.status(400).json({
-          error: 'Invalid Password',
-          message: 'Password is incorrect'
-        });
-      }
+    const isValid = await comparePassword(password, user.password);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Invalid Password', message: 'Password is incorrect' });
+    }
 
-      // TODO: Implement account deletion logic
-      // This will be implemented when database is set up
-      // For now, just mark as deleted
-      user.status = 'deleted';
-      user.updatedAt = new Date().toISOString();
-
-      res.json({
-        message: 'Account deletion request submitted successfully'
-      });
-    });
+    user.status = 'deleted';
+    await user.save();
+    res.json({ message: 'Account deletion request submitted successfully' });
 
   } catch (error) {
     console.error('Delete account error:', error);
@@ -406,11 +381,11 @@ router.post('/account/delete-account', authenticateToken, (req, res) => {
  * @desc    Get user preferences
  * @access  Private
  */
-router.get('/preferences', authenticateToken, (req, res) => {
+router.get('/preferences', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -446,7 +421,7 @@ router.get('/preferences', authenticateToken, (req, res) => {
  * @desc    Update user preferences
  * @access  Private
  */
-router.put('/preferences', authenticateToken, (req, res) => {
+router.put('/preferences', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const { 
@@ -458,7 +433,7 @@ router.put('/preferences', authenticateToken, (req, res) => {
       theme 
     } = req.body;
 
-    const user = users.find(u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -466,25 +441,18 @@ router.put('/preferences', authenticateToken, (req, res) => {
       });
     }
 
-    // Initialize preferences if not exists
-    if (!user.preferences) {
-      user.preferences = {};
-    }
+    const newPrefs = { ...(user.preferences?.toObject ? user.preferences.toObject() : user.preferences) };
+    if (emailNotifications !== undefined) newPrefs.emailNotifications = emailNotifications;
+    if (pushNotifications !== undefined) newPrefs.pushNotifications = pushNotifications;
+    if (privacy !== undefined) newPrefs.privacy = privacy;
+    if (language !== undefined) newPrefs.language = language;
+    if (timezone !== undefined) newPrefs.timezone = timezone;
+    if (theme !== undefined) newPrefs.theme = theme;
 
-    // Update preferences
-    if (emailNotifications !== undefined) user.preferences.emailNotifications = emailNotifications;
-    if (pushNotifications !== undefined) user.preferences.pushNotifications = pushNotifications;
-    if (privacy !== undefined) user.preferences.privacy = privacy;
-    if (language !== undefined) user.preferences.language = language;
-    if (timezone !== undefined) user.preferences.timezone = timezone;
-    if (theme !== undefined) user.preferences.theme = theme;
+    user.preferences = newPrefs;
+    await user.save();
 
-    user.updatedAt = new Date().toISOString();
-
-    res.json({
-      message: 'Preferences updated successfully',
-      preferences: user.preferences
-    });
+    res.json({ message: 'Preferences updated successfully', preferences: newPrefs });
 
   } catch (error) {
     console.error('Update preferences error:', error);
@@ -500,11 +468,11 @@ router.put('/preferences', authenticateToken, (req, res) => {
  * @desc    Get notification settings
  * @access  Private
  */
-router.get('/notifications', authenticateToken, (req, res) => {
+router.get('/notifications', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
 
-    const user = users.find(u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -543,12 +511,12 @@ router.get('/notifications', authenticateToken, (req, res) => {
  * @desc    Update notification settings
  * @access  Private
  */
-router.put('/notifications', authenticateToken, (req, res) => {
+router.put('/notifications', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const notificationSettings = req.body;
 
-    const user = users.find(u => u.id === userId);
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User Not Found',
@@ -556,19 +524,11 @@ router.put('/notifications', authenticateToken, (req, res) => {
       });
     }
 
-    // Initialize notification settings if not exists
-    if (!user.notificationSettings) {
-      user.notificationSettings = {};
-    }
+    const newNotif = { ...(user.notificationSettings?.toObject ? user.notificationSettings.toObject() : user.notificationSettings), ...notificationSettings };
+    user.notificationSettings = newNotif;
+    await user.save();
 
-    // Update notification settings
-    Object.assign(user.notificationSettings, notificationSettings);
-    user.updatedAt = new Date().toISOString();
-
-    res.json({
-      message: 'Notification settings updated successfully',
-      notificationSettings: user.notificationSettings
-    });
+    res.json({ message: 'Notification settings updated successfully', notificationSettings: newNotif });
 
   } catch (error) {
     console.error('Update notification settings error:', error);

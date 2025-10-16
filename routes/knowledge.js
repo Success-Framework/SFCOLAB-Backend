@@ -1,22 +1,24 @@
 const express = require("express");
 const { authenticateToken, optionalAuth } = require("../middleware/auth");
 const { knowledgeValidation } = require("../middleware/validation");
+const {
+  Knowledge,
+  KnowledgeComment,
+  ResourceView,
+  ResourceDownload,
+  ResourceLike,
+} = require("../models/schemas");
 
 const router = express.Router();
 
-// Mock data (replace with database operations later)
-let knowledgeResources = [];
-let knowledgeComments = [];
-let resourceViews = [];
-let resourceDownloads = [];
-let resourceLikes = [];
+// Using MongoDB via Mongoose models (see models/schemas.js)
 
 /**
  * @route   GET /api/knowledge
  * @desc    Get all knowledge resources with pagination and filtering
  * @access  Public
  */
-router.get("/", optionalAuth, (req, res) => {
+router.get("/", optionalAuth, async (req, res) => {
   try {
     const {
       page = 1,
@@ -27,68 +29,37 @@ router.get("/", optionalAuth, (req, res) => {
       sortOrder = "desc",
     } = req.query;
 
-    let filteredResources = [...knowledgeResources];
-
-    // Filter by category
-    if (category) {
-      filteredResources = filteredResources.filter(
-        (resource) => resource.category === category
-      );
-    }
-
-    // Search functionality
+    const query = {};
+    if (category) query.category = category;
     if (search) {
-      const searchLower = search.toLowerCase();
-      filteredResources = filteredResources.filter(
-        (resource) =>
-          resource.title.toLowerCase().includes(searchLower) ||
-          resource.titleDescription.toLowerCase().includes(searchLower) ||
-          resource.contentPreview.toLowerCase().includes(searchLower) ||
-          resource.author.firstName.toLowerCase().includes(searchLower) ||
-          resource.author.lastName.toLowerCase().includes(searchLower) ||
-          resource.tags.some((tag) => tag.toLowerCase().includes(searchLower))
-      );
+      const regex = new RegExp(search, "i");
+      query.$or = [
+        { title: regex },
+        { titleDescription: regex },
+        { contentPreview: regex },
+        { "author.firstName": regex },
+        { "author.lastName": regex },
+        { tags: { $in: [regex] } },
+      ];
     }
 
-    // Sorting
-    filteredResources.sort((a, b) => {
-      let aValue = a[sortBy];
-      let bValue = b[sortBy];
+    const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const [resources, totalResources] = await Promise.all([
+      Knowledge.find(query).sort(sort).skip(skip).limit(parseInt(limit)),
+      Knowledge.countDocuments(query),
+    ]);
 
-      if (sortBy === "author") {
-        aValue = `${a.author.firstName} ${a.author.lastName}`;
-        bValue = `${b.author.firstName} ${b.author.lastName}`;
-      }
-
-      if (typeof aValue === "string") {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
-
-      if (sortOrder === "asc") {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
-    });
-
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const paginatedResources = filteredResources.slice(startIndex, endIndex);
-
-    // Get total count for pagination info
-    const totalResources = filteredResources.length;
-    const totalPages = Math.ceil(totalResources / limit);
+    const totalPages = Math.ceil(totalResources / parseInt(limit));
 
     res.json({
-      resources: paginatedResources,
+      resources,
       pagination: {
         currentPage: parseInt(page),
         totalPages,
         totalResources,
-        hasNextPage: endIndex < totalResources,
-        hasPrevPage: page > 1,
+        hasNextPage: skip + resources.length < totalResources,
+        hasPrevPage: parseInt(page) > 1,
       },
     });
   } catch (error) {
@@ -109,7 +80,7 @@ router.post(
   "/",
   authenticateToken,
   knowledgeValidation.addResource,
-  (req, res) => {
+  async (req, res) => {
     try {
       const { userId, firstName, lastName } = req.user;
       const {
@@ -121,32 +92,23 @@ router.post(
         tags = [],
       } = req.body;
 
-      const newResource = {
-        id: Date.now().toString(),
+      const resourceDoc = await Knowledge.create({
         title,
         titleDescription,
         contentPreview,
         category,
         fileUrl: fileUrl || null,
         tags: Array.isArray(tags) ? tags : [],
-        author: {
-          id: userId,
-          firstName,
-          lastName,
-        },
+        author: { id: userId, firstName, lastName },
         status: "active",
         views: 0,
         downloads: 0,
         likes: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      knowledgeResources.push(newResource);
+      });
 
       res.status(201).json({
         message: "Knowledge resource added successfully",
-        resource: newResource,
+        resource: resourceDoc,
       });
     } catch (error) {
       console.error("Add knowledge resource error:", error);
@@ -163,13 +125,10 @@ router.post(
  * @desc    Get all available categories
  * @access  Public
  */
-router.get("/categories", (req, res) => {
+router.get("/categories", async (req, res) => {
   try {
-    const categories = [...new Set(knowledgeResources.map((r) => r.category))];
-
-    res.json({
-      categories: categories.sort(),
-    });
+    const categories = await Knowledge.distinct("category");
+    res.json({ categories: categories.sort() });
   } catch (error) {
     console.error("Get categories error:", error);
     res.status(500).json({
@@ -226,14 +185,10 @@ router.get("/predefined-categories", (req, res) => {
  * @desc    Get available tags for multiple selection
  * @access  Public
  */
-router.get("/available-tags", (req, res) => {
+router.get("/available-tags", async (req, res) => {
   try {
-    const allTags = knowledgeResources.flatMap((r) => r.tags || []);
-    const uniqueTags = [...new Set(allTags)];
-
-    res.json({
-      tags: uniqueTags.sort(),
-    });
+    const uniqueTags = await Knowledge.distinct("tags");
+    res.json({ tags: (uniqueTags || []).sort() });
   } catch (error) {
     console.error("Get available tags error:", error);
     res.status(500).json({
@@ -313,31 +268,28 @@ router.post("/upload", authenticateToken, (req, res) => {
  * @desc    Get user's knowledge resources
  * @access  Private
  */
-router.get("/user/resources", authenticateToken, (req, res) => {
+router.get("/user/resources", authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const { page = 1, limit = 10 } = req.query;
 
-    const userResources = knowledgeResources.filter(
-      (r) => r.author.id === userId
-    );
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const query = { "author.id": userId };
+    const [resources, totalResources] = await Promise.all([
+      Knowledge.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+      Knowledge.countDocuments(query),
+    ]);
 
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const paginatedResources = userResources.slice(startIndex, endIndex);
-
-    const totalResources = userResources.length;
-    const totalPages = Math.ceil(totalResources / limit);
+    const totalPages = Math.ceil(totalResources / parseInt(limit));
 
     res.json({
-      resources: paginatedResources,
+      resources,
       pagination: {
         currentPage: parseInt(page),
         totalPages,
         totalResources,
-        hasNextPage: endIndex < totalResources,
-        hasPrevPage: page > 1,
+        hasNextPage: skip + resources.length < totalResources,
+        hasPrevPage: parseInt(page) > 1,
       },
     });
   } catch (error) {
@@ -354,12 +306,12 @@ router.get("/user/resources", authenticateToken, (req, res) => {
  * @desc    Get knowledge resource by ID with comments
  * @access  Public
  */
-router.get("/:id", optionalAuth, (req, res) => {
+router.get("/:id", optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user || {};
 
-    const resource = knowledgeResources.find((r) => r.id === id);
+    const resource = await Knowledge.findById(id);
     if (!resource) {
       return res.status(404).json({
         error: "Resource Not Found",
@@ -367,33 +319,21 @@ router.get("/:id", optionalAuth, (req, res) => {
       });
     }
 
-    // Increment view count if user is authenticated
-    if (userId && userId !== resource.author.id) {
-      resource.views += 1;
-
-      // Track view
-      const existingView = resourceViews.find(
-        (v) => v.resourceId === id && v.userId === userId
-      );
+    // Increment view count and track view if authenticated and not author
+    if (userId && userId !== resource.author.id.toString()) {
+      await Knowledge.findByIdAndUpdate(id, { $inc: { views: 1 } });
+      const existingView = await ResourceView.findOne({ resourceId: id, userId });
       if (!existingView) {
-        resourceViews.push({
-          id: Date.now().toString(),
-          resourceId: id,
-          userId,
-          viewedAt: new Date().toISOString(),
-        });
+        await ResourceView.create({ resourceId: id, userId, viewedAt: new Date() });
       }
     }
 
-    // Get comments for this resource
-    const resourceComments = knowledgeComments.filter(
-      (c) => c.resourceId === id
-    );
+    const comments = await KnowledgeComment.find({ resourceId: id }).sort({ createdAt: -1 });
 
     res.json({
       resource: {
-        ...resource,
-        comments: resourceComments,
+        ...resource.toObject(),
+        comments,
       },
     });
   } catch (error) {
@@ -414,20 +354,13 @@ router.put(
   "/:id",
   authenticateToken,
   knowledgeValidation.addResource,
-  (req, res) => {
+  async (req, res) => {
     try {
       const { id } = req.params;
       const { userId } = req.user;
-      const {
-        title,
-        titleDescription,
-        contentPreview,
-        category,
-        fileUrl,
-        tags,
-      } = req.body;
+      const { title, titleDescription, contentPreview, category, fileUrl, tags } = req.body;
 
-      const resource = knowledgeResources.find((r) => r.id === id);
+      const resource = await Knowledge.findById(id);
       if (!resource) {
         return res.status(404).json({
           error: "Resource Not Found",
@@ -435,33 +368,25 @@ router.put(
         });
       }
 
-      // Check if user is the author
-      if (resource.author.id !== userId) {
+      if (resource.author.id.toString() !== userId) {
         return res.status(403).json({
           error: "Forbidden",
           message: "You can only update your own knowledge resources",
         });
       }
 
-      // Update resource
       resource.title = title;
       resource.titleDescription = titleDescription;
       resource.contentPreview = contentPreview;
       resource.category = category;
-      resource.fileUrl = fileUrl || resource.fileUrl;
+      if (fileUrl) resource.fileUrl = fileUrl;
       resource.tags = Array.isArray(tags) ? tags : [];
-      resource.updatedAt = new Date().toISOString();
+      await resource.save();
 
-      res.json({
-        message: "Knowledge resource updated successfully",
-        resource,
-      });
+      res.json({ message: "Knowledge resource updated successfully", resource });
     } catch (error) {
       console.error("Update knowledge resource error:", error);
-      res.status(500).json({
-        error: "Update Failed",
-        message: "Failed to update knowledge resource",
-      });
+      res.status(500).json({ error: "Update Failed", message: "Failed to update knowledge resource" });
     }
   }
 );
@@ -471,47 +396,32 @@ router.put(
  * @desc    Delete knowledge resource (only author can delete)
  * @access  Private
  */
-router.delete("/:id", authenticateToken, (req, res) => {
+router.delete("/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user;
 
-    const resourceIndex = knowledgeResources.findIndex((r) => r.id === id);
-    if (resourceIndex === -1) {
-      return res.status(404).json({
-        error: "Resource Not Found",
-        message: "Knowledge resource not found",
-      });
+    const resource = await Knowledge.findById(id);
+    if (!resource) {
+      return res.status(404).json({ error: "Resource Not Found", message: "Knowledge resource not found" });
     }
 
-    const resource = knowledgeResources[resourceIndex];
-
-    // Check if user is the author
-    if (resource.author.id !== userId) {
-      return res.status(403).json({
-        error: "Forbidden",
-        message: "You can only delete your own knowledge resources",
-      });
+    if (resource.author.id.toString() !== userId) {
+      return res.status(403).json({ error: "Forbidden", message: "You can only delete your own knowledge resources" });
     }
 
-    // Delete resource
-    knowledgeResources.splice(resourceIndex, 1);
+    await Knowledge.findByIdAndDelete(id);
+    await Promise.all([
+      KnowledgeComment.deleteMany({ resourceId: id }),
+      ResourceView.deleteMany({ resourceId: id }),
+      ResourceDownload.deleteMany({ resourceId: id }),
+      ResourceLike.deleteMany({ resourceId: id }),
+    ]);
 
-    // Delete associated data
-    knowledgeComments = knowledgeComments.filter((c) => c.resourceId !== id);
-    resourceViews = resourceViews.filter((v) => v.resourceId !== id);
-    resourceDownloads = resourceDownloads.filter((d) => d.resourceId !== id);
-    resourceLikes = resourceLikes.filter((l) => l.resourceId !== id);
-
-    res.json({
-      message: "Knowledge resource deleted successfully",
-    });
+    res.json({ message: "Knowledge resource deleted successfully" });
   } catch (error) {
     console.error("Delete knowledge resource error:", error);
-    res.status(500).json({
-      error: "Deletion Failed",
-      message: "Failed to delete knowledge resource",
-    });
+    res.status(500).json({ error: "Deletion Failed", message: "Failed to delete knowledge resource" });
   }
 });
 
@@ -520,45 +430,27 @@ router.delete("/:id", authenticateToken, (req, res) => {
  * @desc    Add comment to knowledge resource
  * @access  Private
  */
-router.post("/:id/comments", authenticateToken, (req, res) => {
+router.post("/:id/comments", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId, firstName, lastName } = req.user;
     const { content } = req.body;
 
-    const resource = knowledgeResources.find((r) => r.id === id);
+    const resource = await Knowledge.findById(id);
     if (!resource) {
-      return res.status(404).json({
-        error: "Resource Not Found",
-        message: "Knowledge resource not found",
-      });
+      return res.status(404).json({ error: "Resource Not Found", message: "Knowledge resource not found" });
     }
 
-    const newComment = {
-      id: Date.now().toString(),
+    const comment = await KnowledgeComment.create({
       resourceId: id,
       content,
-      author: {
-        id: userId,
-        firstName,
-        lastName,
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    knowledgeComments.push(newComment);
-
-    res.status(201).json({
-      message: "Comment added successfully",
-      comment: newComment,
+      author: { id: userId, firstName, lastName },
     });
+
+    res.status(201).json({ message: "Comment added successfully", comment });
   } catch (error) {
     console.error("Add comment error:", error);
-    res.status(500).json({
-      error: "Comment Failed",
-      message: "Failed to add comment",
-    });
+    res.status(500).json({ error: "Comment Failed", message: "Failed to add comment" });
   }
 });
 
@@ -567,47 +459,36 @@ router.post("/:id/comments", authenticateToken, (req, res) => {
  * @desc    Get comments for a knowledge resource
  * @access  Public
  */
-router.get("/:id/comments", (req, res) => {
+router.get("/:id/comments", async (req, res) => {
   try {
     const { id } = req.params;
     const { page = 1, limit = 20 } = req.query;
 
-    const resource = knowledgeResources.find((r) => r.id === id);
+    const resource = await Knowledge.findById(id);
     if (!resource) {
-      return res.status(404).json({
-        error: "Resource Not Found",
-        message: "Knowledge resource not found",
-      });
+      return res.status(404).json({ error: "Resource Not Found", message: "Knowledge resource not found" });
     }
 
-    const resourceComments = knowledgeComments.filter(
-      (c) => c.resourceId === id
-    );
-
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const paginatedComments = resourceComments.slice(startIndex, endIndex);
-
-    const totalComments = resourceComments.length;
-    const totalPages = Math.ceil(totalComments / limit);
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const [comments, totalComments] = await Promise.all([
+      KnowledgeComment.find({ resourceId: id }).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+      KnowledgeComment.countDocuments({ resourceId: id }),
+    ]);
+    const totalPages = Math.ceil(totalComments / parseInt(limit));
 
     res.json({
-      comments: paginatedComments,
+      comments,
       pagination: {
         currentPage: parseInt(page),
         totalPages,
         totalComments,
-        hasNextPage: endIndex < totalComments,
-        hasPrevPage: page > 1,
+        hasNextPage: skip + comments.length < totalComments,
+        hasPrevPage: parseInt(page) > 1,
       },
     });
   } catch (error) {
     console.error("Get comments error:", error);
-    res.status(500).json({
-      error: "Fetch Failed",
-      message: "Failed to fetch comments",
-    });
+    res.status(500).json({ error: "Fetch Failed", message: "Failed to fetch comments" });
   }
 });
 
@@ -616,45 +497,27 @@ router.get("/:id/comments", (req, res) => {
  * @desc    Track resource download
  * @access  Private
  */
-router.post("/:id/download", authenticateToken, (req, res) => {
+router.post("/:id/download", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user;
 
-    const resource = knowledgeResources.find((r) => r.id === id);
+    const resource = await Knowledge.findById(id);
     if (!resource) {
-      return res.status(404).json({
-        error: "Resource Not Found",
-        message: "Knowledge resource not found",
-      });
+      return res.status(404).json({ error: "Resource Not Found", message: "Knowledge resource not found" });
     }
 
-    // Increment download count
-    resource.downloads += 1;
-
-    // Track download
-    const existingDownload = resourceDownloads.find(
-      (d) => d.resourceId === id && d.userId === userId
-    );
+    await Knowledge.findByIdAndUpdate(id, { $inc: { downloads: 1 } });
+    const existingDownload = await ResourceDownload.findOne({ resourceId: id, userId });
     if (!existingDownload) {
-      resourceDownloads.push({
-        id: Date.now().toString(),
-        resourceId: id,
-        userId,
-        downloadedAt: new Date().toISOString(),
-      });
+      await ResourceDownload.create({ resourceId: id, userId, downloadedAt: new Date() });
     }
 
-    res.json({
-      message: "Download tracked successfully",
-      downloads: resource.downloads,
-    });
+    const updated = await Knowledge.findById(id).select("downloads");
+    res.json({ message: "Download tracked successfully", downloads: updated.downloads });
   } catch (error) {
     console.error("Track download error:", error);
-    res.status(500).json({
-      error: "Tracking Failed",
-      message: "Failed to track download",
-    });
+    res.status(500).json({ error: "Tracking Failed", message: "Failed to track download" });
   }
 });
 
@@ -663,58 +526,31 @@ router.post("/:id/download", authenticateToken, (req, res) => {
  * @desc    Like/unlike knowledge resource
  * @access  Private
  */
-router.post("/:id/like", authenticateToken, (req, res) => {
+router.post("/:id/like", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user;
 
-    const resource = knowledgeResources.find((r) => r.id === id);
+    const resource = await Knowledge.findById(id);
     if (!resource) {
-      return res.status(404).json({
-        error: "Resource Not Found",
-        message: "Knowledge resource not found",
-      });
+      return res.status(404).json({ error: "Resource Not Found", message: "Knowledge resource not found" });
     }
 
-    // Check if user already liked
-    const existingLike = resourceLikes.find(
-      (l) => l.resourceId === id && l.userId === userId
-    );
-
+    const existingLike = await ResourceLike.findOne({ resourceId: id, userId });
     if (existingLike) {
-      // Unlike
-      resourceLikes = resourceLikes.filter((l) => l.id !== existingLike.id);
-      resource.likes -= 1;
-
-      res.json({
-        message: "Resource unliked successfully",
-        liked: false,
-        likes: resource.likes,
-      });
+      await ResourceLike.deleteOne({ _id: existingLike._id });
+      await Knowledge.findByIdAndUpdate(id, { $inc: { likes: -1 } });
+      const updated = await Knowledge.findById(id).select("likes");
+      return res.json({ message: "Resource unliked successfully", liked: false, likes: updated.likes });
     } else {
-      // Like
-      const newLike = {
-        id: Date.now().toString(),
-        resourceId: id,
-        userId,
-        likedAt: new Date().toISOString(),
-      };
-
-      resourceLikes.push(newLike);
-      resource.likes += 1;
-
-      res.json({
-        message: "Resource liked successfully",
-        liked: true,
-        likes: resource.likes,
-      });
+      await ResourceLike.create({ resourceId: id, userId, likedAt: new Date() });
+      await Knowledge.findByIdAndUpdate(id, { $inc: { likes: 1 } });
+      const updated = await Knowledge.findById(id).select("likes");
+      return res.json({ message: "Resource liked successfully", liked: true, likes: updated.likes });
     }
   } catch (error) {
     console.error("Like/unlike error:", error);
-    res.status(500).json({
-      error: "Action Failed",
-      message: "Failed to like/unlike resource",
-    });
+    res.status(500).json({ error: "Action Failed", message: "Failed to like/unlike resource" });
   }
 });
 
@@ -723,45 +559,36 @@ router.post("/:id/like", authenticateToken, (req, res) => {
  * @desc    Get users who liked a resource
  * @access  Public
  */
-router.get("/:id/likes", (req, res) => {
+router.get("/:id/likes", async (req, res) => {
   try {
     const { id } = req.params;
     const { page = 1, limit = 20 } = req.query;
 
-    const resource = knowledgeResources.find((r) => r.id === id);
+    const resource = await Knowledge.findById(id);
     if (!resource) {
-      return res.status(404).json({
-        error: "Resource Not Found",
-        message: "Knowledge resource not found",
-      });
+      return res.status(404).json({ error: "Resource Not Found", message: "Knowledge resource not found" });
     }
 
-    const resourceLikesList = resourceLikes.filter((l) => l.resourceId === id);
-
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const paginatedLikes = resourceLikesList.slice(startIndex, endIndex);
-
-    const totalLikes = resourceLikesList.length;
-    const totalPages = Math.ceil(totalLikes / limit);
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const [likes, totalLikes] = await Promise.all([
+      ResourceLike.find({ resourceId: id }).sort({ likedAt: -1 }).skip(skip).limit(parseInt(limit)),
+      ResourceLike.countDocuments({ resourceId: id }),
+    ]);
+    const totalPages = Math.ceil(totalLikes / parseInt(limit));
 
     res.json({
-      likes: paginatedLikes,
+      likes,
       pagination: {
         currentPage: parseInt(page),
         totalPages,
         totalLikes,
-        hasNextPage: endIndex < totalLikes,
-        hasPrevPage: page > 1,
+        hasNextPage: skip + likes.length < totalLikes,
+        hasPrevPage: parseInt(page) > 1,
       },
     });
   } catch (error) {
     console.error("Get likes error:", error);
-    res.status(500).json({
-      error: "Fetch Failed",
-      message: "Failed to fetch likes",
-    });
+    res.status(500).json({ error: "Fetch Failed", message: "Failed to fetch likes" });
   }
 });
 
