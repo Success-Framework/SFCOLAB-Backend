@@ -102,6 +102,7 @@ async function main() {
         likes: r.likes || 0,
         createdAt: r.createdAt ? new Date(r.createdAt) : undefined,
         updatedAt: r.updatedAt ? new Date(r.updatedAt) : undefined,
+        image: r.image ? Buffer.from(r.image, 'base64') : null,
       });
       idMap.set(r.id, doc._id);
     }
