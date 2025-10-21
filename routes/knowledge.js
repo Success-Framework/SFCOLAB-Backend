@@ -97,7 +97,7 @@ router.get("/", optionalAuth, async (req, res) => {
 router.post(
   "/",
   authenticateToken,
-  upload.single('image'),
+  upload.single("fileUrl"), 
   knowledgeValidation.addResource,
   async (req, res) => {
     try {
@@ -107,23 +107,24 @@ router.post(
         titleDescription,
         contentPreview,
         category,
-        fileUrl,
         tags = [],
       } = req.body;
+
+      const imageBuffer = req.file ? req.file.buffer : null;
 
       const resourceDoc = await Knowledge.create({
         title,
         titleDescription,
         contentPreview,
         category,
-        fileUrl: fileUrl || null,
+        fileUrl: null, 
         tags: Array.isArray(tags) ? tags : [],
         author: { id: userId, firstName, lastName },
         status: "active",
         views: 0,
         downloads: 0,
         likes: 0,
-        image: req.file ? req.file.buffer : null,
+        image: imageBuffer, 
       });
 
       res.status(201).json({
@@ -256,7 +257,7 @@ router.post("/upload", authenticateToken, (req, res) => {
       });
     }
 
-    const maxSize = 50 * 1024 * 1024; // 50MB
+    const maxSize = 50 * 1024 * 1024; 
     if (fileSize > maxSize) {
       return res.status(400).json({
         error: "File Too Large",
