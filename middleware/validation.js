@@ -194,10 +194,6 @@ const knowledgeValidation = {
       .trim()
       .isLength({ min: 2, max: 50 })
       .withMessage('Each tag must be between 2 and 50 characters'),
-    body('fileUrl')
-      .optional()
-      .isURL()
-      .withMessage('File URL must be a valid URL'),
     handleValidationErrors
   ]
 };
