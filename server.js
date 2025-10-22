@@ -16,14 +16,18 @@ const profileRoutes = require('./routes/profile');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS with support for Referer-based allowance when Origin is missing
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? ['https://yourdomain.com', 'http://localhost:5173'] // Add your frontend domain here
-  : ['http://localhost:5173', 'http://localhost:5174'];
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+  'https://yourdomain.com' 
+];
 
 const corsOptionsDelegate = (req, callback) => {
   let requestOrigin = req.header('Origin');
 
+  // If no Origin header, fall back to Referer for safety
   if (!requestOrigin) {
     const refererHeader = req.header('Referer') || req.header('Referrer');
     if (refererHeader) {
@@ -36,36 +40,33 @@ const corsOptionsDelegate = (req, callback) => {
     }
   }
 
-  const commonOptions = {
+  const isAllowed = requestOrigin && allowedOrigins.includes(requestOrigin);
+  const isLocalhost = requestOrigin && requestOrigin.includes('localhost:5173');
+
+  const corsOptions = {
+    origin: isAllowed || isLocalhost ? requestOrigin || true : false,
+    credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: true,
-    optionsSuccessStatus: 204
+    optionsSuccessStatus: 204,
   };
 
-  // In development, be more permissive
-  if (process.env.NODE_ENV !== 'production') {
-    callback(null, { ...commonOptions, origin: true });
-  } else if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
-    callback(null, { ...commonOptions, origin: requestOrigin });
-  } else {
-    callback(null, { ...commonOptions, origin: false });
-  }
+  callback(null, corsOptions);
 };
 
+// ✅ Apply CORS globally (for all routes including file uploads)
 app.use(cors(corsOptionsDelegate));
-// Ensure preflight (OPTIONS) requests are handled for all routes
 app.options('*', cors(corsOptionsDelegate));
 
 // Security middleware
 app.use(helmet({
-  crossOriginResourcePolicy: false, // important for CORS
+  crossOriginResourcePolicy: false, 
 }));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, 
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
