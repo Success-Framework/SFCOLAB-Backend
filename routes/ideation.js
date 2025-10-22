@@ -1,7 +1,7 @@
-const express = require('express');
-const { authenticateToken, optionalAuth } = require('../middleware/auth');
-const { ideationValidation } = require('../middleware/validation');
-const { Idea, IdeaComment, Suggestion } = require('../models/schemas');
+const express = require("express");
+const { authenticateToken, optionalAuth } = require("../middleware/auth");
+const { ideationValidation } = require("../middleware/validation");
+const { Idea, IdeaComment, Suggestion } = require("../models/schemas");
 
 const router = express.Router();
 
@@ -10,41 +10,41 @@ const router = express.Router();
  * @desc    Get all ideas with pagination and filtering
  * @access  Public
  */
-router.get('/', optionalAuth, async (req, res) => {
+router.get("/", optionalAuth, async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      category, 
-      search, 
-      sortBy = 'createdAt',
-      sortOrder = 'desc' 
+    const {
+      page = 1,
+      limit = 10,
+      category,
+      search,
+      sortBy = "createdAt",
+      sortOrder = "desc",
     } = req.query;
 
     const query = {};
     if (category) query.industry = category; // mapping: category -> industry if needed
     if (search) {
-      const regex = new RegExp(search, 'i');
+      const regex = new RegExp(search, "i");
       query.$or = [
         { title: regex },
         { description: regex },
         { projectDetails: regex },
         { industry: regex },
         { stage: regex },
-        { 'creator.firstName': regex },
-        { 'creator.lastName': regex },
+        { "creator.firstName": regex },
+        { "creator.lastName": regex },
         { tags: { $in: [regex] } },
-        { 'teamMembers.name': regex },
-        { 'teamMembers.position': regex },
-        { 'teamMembers.skills': { $in: [regex] } },
+        { "teamMembers.name": regex },
+        { "teamMembers.position": regex },
+        { "teamMembers.skills": { $in: [regex] } },
       ];
     }
 
-    const sort = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
+    const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [ideas, totalIdeas] = await Promise.all([
       Idea.find(query).sort(sort).skip(skip).limit(parseInt(limit)),
-      Idea.countDocuments(query)
+      Idea.countDocuments(query),
     ]);
 
     const totalPages = Math.ceil(totalIdeas / parseInt(limit));
@@ -56,13 +56,14 @@ router.get('/', optionalAuth, async (req, res) => {
         totalPages,
         totalIdeas,
         hasNextPage: skip + ideas.length < totalIdeas,
-        hasPrevPage: parseInt(page) > 1
-      }
+        hasPrevPage: parseInt(page) > 1,
+      },
     });
-
   } catch (error) {
-    console.error('Get ideas error:', error);
-    res.status(500).json({ error: 'Fetch Failed', message: 'Failed to fetch ideas' });
+    console.error("Get ideas error:", error);
+    res
+      .status(500)
+      .json({ error: "Fetch Failed", message: "Failed to fetch ideas" });
   }
 });
 
@@ -71,61 +72,82 @@ router.get('/', optionalAuth, async (req, res) => {
  * @desc    Create a new idea
  * @access  Private
  */
-router.post('/', authenticateToken, ideationValidation.createIdea, async (req, res) => {
-  try {
-    const { userId, firstName, lastName } = req.user;
-    const { title, description, projectDetails, industry, stage, teamMembers = [], tags = [] } = req.body;
+router.post(
+  "/",
+  authenticateToken,
+  ideationValidation.createIdea,
+  async (req, res) => {
+    try {
+      const { userId, firstName, lastName } = req.user;
+      const {
+        title,
+        description,
+        projectDetails,
+        industry,
+        stage,
+        teamMembers = [],
+        tags = [],
+      } = req.body;
 
-    const ideaDoc = await Idea.create({
-      title,
-      description,
-      projectDetails,
-      industry,
-      stage,
-      teamMembers: Array.isArray(teamMembers) ? teamMembers.slice(0, 3) : [],
-      tags: Array.isArray(tags) ? tags : [],
-      creator: { id: userId, firstName, lastName },
-      status: 'active',
-      likes: 0,
-      views: 0,
-    });
+      const ideaDoc = await Idea.create({
+        title,
+        description,
+        projectDetails,
+        industry,
+        stage,
+        teamMembers: Array.isArray(teamMembers) ? teamMembers.slice(0, 3) : [],
+        tags: Array.isArray(tags) ? tags : [],
+        creator: { id: userId, firstName, lastName },
+        status: "active",
+        likes: 0,
+        views: 0,
+      });
 
-    res.status(201).json({ message: 'Idea created successfully', idea: ideaDoc });
-
-  } catch (error) {
-    console.error('Create idea error:', error);
-    res.status(500).json({ error: 'Creation Failed', message: 'Failed to create idea' });
+      res
+        .status(201)
+        .json({ message: "Idea created successfully", idea: ideaDoc });
+    } catch (error) {
+      console.error("Create idea error:", error);
+      res
+        .status(500)
+        .json({ error: "Creation Failed", message: "Failed to create idea" });
+    }
   }
-});
+);
 
 /**
  * @route   GET /api/ideation/:id
  * @desc    Get idea by ID with comments
  * @access  Public
  */
-router.get('/:id', optionalAuth, async (req, res) => {
+router.get("/:id", optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user || {};
 
     const idea = await Idea.findById(id);
     if (!idea) {
-      return res.status(404).json({ error: 'Idea Not Found', message: 'Idea not found' });
+      return res
+        .status(404)
+        .json({ error: "Idea Not Found", message: "Idea not found" });
     }
 
     if (userId && userId !== idea.creator.id.toString()) {
       await Idea.findByIdAndUpdate(id, { $inc: { views: 1 } });
     }
 
-    const ideaComments = await IdeaComment.find({ ideaId: id }).sort({ createdAt: -1 });
-
-    res.json({
-      idea: { ...idea.toObject(), comments: ideaComments }
+    const ideaComments = await IdeaComment.find({ ideaId: id }).sort({
+      createdAt: -1,
     });
 
+    res.json({
+      idea: { ...idea.toObject(), comments: ideaComments },
+    });
   } catch (error) {
-    console.error('Get idea error:', error);
-    res.status(500).json({ error: 'Fetch Failed', message: 'Failed to fetch idea' });
+    console.error("Get idea error:", error);
+    res
+      .status(500)
+      .json({ error: "Fetch Failed", message: "Failed to fetch idea" });
   }
 });
 
@@ -134,58 +156,93 @@ router.get('/:id', optionalAuth, async (req, res) => {
  * @desc    Update idea (only creator can update)
  * @access  Private
  */
-router.put('/:id', authenticateToken, ideationValidation.createIdea, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId } = req.user;
-    const { title, description, projectDetails, industry, stage, teamMembers, tags } = req.body;
+router.put(
+  "/:id",
+  authenticateToken,
+  ideationValidation.createIdea,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId } = req.user;
+      const {
+        title,
+        description,
+        projectDetails,
+        industry,
+        stage,
+        teamMembers,
+        tags,
+      } = req.body;
 
-    const idea = await Idea.findById(id);
-    if (!idea) return res.status(404).json({ error: 'Idea Not Found', message: 'Idea not found' });
+      const idea = await Idea.findById(id);
+      if (!idea)
+        return res
+          .status(404)
+          .json({ error: "Idea Not Found", message: "Idea not found" });
 
-    if (idea.creator.id.toString() !== userId) {
-      return res.status(403).json({ error: 'Forbidden', message: 'You can only update your own ideas' });
+      if (idea.creator.id.toString() !== userId) {
+        return res
+          .status(403)
+          .json({
+            error: "Forbidden",
+            message: "You can only update your own ideas",
+          });
+      }
+
+      idea.title = title;
+      idea.description = description;
+      idea.projectDetails = projectDetails;
+      idea.industry = industry;
+      idea.stage = stage;
+      idea.teamMembers = Array.isArray(teamMembers)
+        ? teamMembers.slice(0, 3)
+        : [];
+      idea.tags = Array.isArray(tags) ? tags : [];
+      await idea.save();
+
+      res.json({ message: "Idea updated successfully", idea });
+    } catch (error) {
+      console.error("Update idea error:", error);
+      res
+        .status(500)
+        .json({ error: "Update Failed", message: "Failed to update idea" });
     }
-
-    idea.title = title;
-    idea.description = description;
-    idea.projectDetails = projectDetails;
-    idea.industry = industry;
-    idea.stage = stage;
-    idea.teamMembers = Array.isArray(teamMembers) ? teamMembers.slice(0, 3) : [];
-    idea.tags = Array.isArray(tags) ? tags : [];
-    await idea.save();
-
-    res.json({ message: 'Idea updated successfully', idea });
-  } catch (error) {
-    console.error('Update idea error:', error);
-    res.status(500).json({ error: 'Update Failed', message: 'Failed to update idea' });
   }
-});
+);
 
 /**
  * @route   DELETE /api/ideation/:id
  * @desc    Delete idea (only creator can delete)
  * @access  Private
  */
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete("/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user;
 
     const idea = await Idea.findById(id);
-    if (!idea) return res.status(404).json({ error: 'Idea Not Found', message: 'Idea not found' });
+    if (!idea)
+      return res
+        .status(404)
+        .json({ error: "Idea Not Found", message: "Idea not found" });
     if (idea.creator.id.toString() !== userId) {
-      return res.status(403).json({ error: 'Forbidden', message: 'You can only delete your own ideas' });
+      return res
+        .status(403)
+        .json({
+          error: "Forbidden",
+          message: "You can only delete your own ideas",
+        });
     }
 
     await Idea.findByIdAndDelete(id);
     await IdeaComment.deleteMany({ ideaId: id });
 
-    res.json({ message: 'Idea deleted successfully' });
+    res.json({ message: "Idea deleted successfully" });
   } catch (error) {
-    console.error('Delete idea error:', error);
-    res.status(500).json({ error: 'Deletion Failed', message: 'Failed to delete idea' });
+    console.error("Delete idea error:", error);
+    res
+      .status(500)
+      .json({ error: "Deletion Failed", message: "Failed to delete idea" });
   }
 });
 
@@ -194,45 +251,61 @@ router.delete('/:id', authenticateToken, async (req, res) => {
  * @desc    Add comment to idea
  * @access  Private
  */
-router.post('/:id/comments', authenticateToken, ideationValidation.createComment, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId, firstName, lastName } = req.user;
-    const { content } = req.body;
+router.post(
+  "/:id/comments",
+  authenticateToken,
+  ideationValidation.createComment,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId, firstName, lastName } = req.user;
+      const { content } = req.body;
 
-    const idea = await Idea.findById(id);
-    if (!idea) return res.status(404).json({ error: 'Idea Not Found', message: 'Idea not found' });
+      const idea = await Idea.findById(id);
+      if (!idea)
+        return res
+          .status(404)
+          .json({ error: "Idea Not Found", message: "Idea not found" });
 
-    const comment = await IdeaComment.create({
-      ideaId: id,
-      content,
-      author: { id: userId, firstName, lastName },
-    });
+      const comment = await IdeaComment.create({
+        ideaId: id,
+        content,
+        author: { id: userId, firstName, lastName },
+      });
 
-    res.status(201).json({ message: 'Comment added successfully', comment });
-  } catch (error) {
-    console.error('Add comment error:', error);
-    res.status(500).json({ error: 'Comment Failed', message: 'Failed to add comment' });
+      res.status(201).json({ message: "Comment added successfully", comment });
+    } catch (error) {
+      console.error("Add comment error:", error);
+      res
+        .status(500)
+        .json({ error: "Comment Failed", message: "Failed to add comment" });
+    }
   }
-});
+);
 
 /**
  * @route   GET /api/ideation/:id/comments
  * @desc    Get comments for an idea
  * @access  Public
  */
-router.get('/:id/comments', async (req, res) => {
+router.get("/:id/comments", async (req, res) => {
   try {
     const { id } = req.params;
     const { page = 1, limit = 20 } = req.query;
 
     const idea = await Idea.findById(id);
-    if (!idea) return res.status(404).json({ error: 'Idea Not Found', message: 'Idea not found' });
+    if (!idea)
+      return res
+        .status(404)
+        .json({ error: "Idea Not Found", message: "Idea not found" });
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [comments, totalComments] = await Promise.all([
-      IdeaComment.find({ ideaId: id }).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
-      IdeaComment.countDocuments({ ideaId: id })
+      IdeaComment.find({ ideaId: id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      IdeaComment.countDocuments({ ideaId: id }),
     ]);
     const totalPages = Math.ceil(totalComments / parseInt(limit));
 
@@ -243,13 +316,14 @@ router.get('/:id/comments', async (req, res) => {
         totalPages,
         totalComments,
         hasNextPage: skip + comments.length < totalComments,
-        hasPrevPage: parseInt(page) > 1
-      }
+        hasPrevPage: parseInt(page) > 1,
+      },
     });
-
   } catch (error) {
-    console.error('Get comments error:', error);
-    res.status(500).json({ error: 'Fetch Failed', message: 'Failed to fetch comments' });
+    console.error("Get comments error:", error);
+    res
+      .status(500)
+      .json({ error: "Fetch Failed", message: "Failed to fetch comments" });
   }
 });
 
@@ -258,55 +332,85 @@ router.get('/:id/comments', async (req, res) => {
  * @desc    Submit suggestion for idea
  * @access  Private
  */
-router.post('/:id/suggestions', authenticateToken, ideationValidation.createComment, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { userId, firstName, lastName } = req.user;
-    const { content } = req.body;
+router.post(
+  "/:id/suggestions",
+  authenticateToken,
+  ideationValidation.createComment,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId, firstName, lastName } = req.user;
+      const { content } = req.body;
 
-    const idea = await Idea.findById(id);
-    if (!idea) return res.status(404).json({ error: 'Idea Not Found', message: 'Idea not found' });
-    if (idea.creator.id.toString() === userId) {
-      return res.status(400).json({ error: 'Invalid Action', message: 'You cannot suggest improvements to your own idea' });
+      const idea = await Idea.findById(id);
+      if (!idea)
+        return res
+          .status(404)
+          .json({ error: "Idea Not Found", message: "Idea not found" });
+      if (idea.creator.id.toString() === userId) {
+        return res
+          .status(400)
+          .json({
+            error: "Invalid Action",
+            message: "You cannot suggest improvements to your own idea",
+          });
+      }
+
+      const suggestion = await Suggestion.create({
+        ideaId: id,
+        content,
+        author: { id: userId, firstName, lastName },
+        status: "pending",
+      });
+
+      res
+        .status(201)
+        .json({ message: "Suggestion submitted successfully", suggestion });
+    } catch (error) {
+      console.error("Submit suggestion error:", error);
+      res
+        .status(500)
+        .json({
+          error: "Suggestion Failed",
+          message: "Failed to submit suggestion",
+        });
     }
-
-    const suggestion = await Suggestion.create({
-      ideaId: id,
-      content,
-      author: { id: userId, firstName, lastName },
-      status: 'pending'
-    });
-
-    res.status(201).json({ message: 'Suggestion submitted successfully', suggestion });
-
-  } catch (error) {
-    console.error('Submit suggestion error:', error);
-    res.status(500).json({ error: 'Suggestion Failed', message: 'Failed to submit suggestion' });
   }
-});
+);
 
 /**
  * @route   GET /api/ideation/:id/suggestions
  * @desc    Get suggestions for an idea (only creator can see)
  * @access  Private
  */
-router.get('/:id/suggestions', authenticateToken, async (req, res) => {
+router.get("/:id/suggestions", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user;
 
     const idea = await Idea.findById(id);
-    if (!idea) return res.status(404).json({ error: 'Idea Not Found', message: 'Idea not found' });
+    if (!idea)
+      return res
+        .status(404)
+        .json({ error: "Idea Not Found", message: "Idea not found" });
     if (idea.creator.id.toString() !== userId) {
-      return res.status(403).json({ error: 'Forbidden', message: 'Only the idea creator can view suggestions' });
+      return res
+        .status(403)
+        .json({
+          error: "Forbidden",
+          message: "Only the idea creator can view suggestions",
+        });
     }
 
-    const ideaSuggestions = await Suggestion.find({ ideaId: id }).sort({ createdAt: -1 });
+    const ideaSuggestions = await Suggestion.find({ ideaId: id }).sort({
+      createdAt: -1,
+    });
     res.json({ suggestions: ideaSuggestions });
-
   } catch (error) {
-    console.error('Get suggestions error:', error);
-    res.status(500).json({ error: 'Fetch Failed', message: 'Failed to fetch suggestions' });
+    console.error("Get suggestions error:", error);
+    res
+      .status(500)
+      .json({ error: "Fetch Failed", message: "Failed to fetch suggestions" });
   }
 });
 
@@ -315,91 +419,121 @@ router.get('/:id/suggestions', authenticateToken, async (req, res) => {
  * @desc    Update suggestion status (accept/reject)
  * @access  Private
  */
-router.put('/:id/suggestions/:suggestionId', authenticateToken, async (req, res) => {
-  try {
-    const { id, suggestionId } = req.params;
-    const { userId } = req.user;
-    const { status } = req.body;
+router.put(
+  "/:id/suggestions/:suggestionId",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { id, suggestionId } = req.params;
+      const { userId } = req.user;
+      const { status } = req.body;
 
-    if (!['accepted', 'rejected'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid Status', message: 'Status must be either "accepted" or "rejected"' });
+      if (!["accepted", "rejected"].includes(status)) {
+        return res
+          .status(400)
+          .json({
+            error: "Invalid Status",
+            message: 'Status must be either "accepted" or "rejected"',
+          });
+      }
+
+      const idea = await Idea.findById(id);
+      if (!idea)
+        return res
+          .status(404)
+          .json({ error: "Idea Not Found", message: "Idea not found" });
+      if (idea.creator.id.toString() !== userId) {
+        return res
+          .status(403)
+          .json({
+            error: "Forbidden",
+            message: "Only the idea creator can update suggestion status",
+          });
+      }
+
+      const suggestion = await Suggestion.findOne({
+        _id: suggestionId,
+        ideaId: id,
+      });
+      if (!suggestion)
+        return res
+          .status(404)
+          .json({
+            error: "Suggestion Not Found",
+            message: "Suggestion not found",
+          });
+
+      suggestion.status = status;
+      await suggestion.save();
+
+      // TODO: Send notification to suggestion author
+
+      res.json({ message: `Suggestion ${status} successfully`, suggestion });
+    } catch (error) {
+      console.error("Update suggestion error:", error);
+      res
+        .status(500)
+        .json({
+          error: "Update Failed",
+          message: "Failed to update suggestion status",
+        });
     }
-
-    const idea = await Idea.findById(id);
-    if (!idea) return res.status(404).json({ error: 'Idea Not Found', message: 'Idea not found' });
-    if (idea.creator.id.toString() !== userId) {
-      return res.status(403).json({ error: 'Forbidden', message: 'Only the idea creator can update suggestion status' });
-    }
-
-    const suggestion = await Suggestion.findOne({ _id: suggestionId, ideaId: id });
-    if (!suggestion) return res.status(404).json({ error: 'Suggestion Not Found', message: 'Suggestion not found' });
-
-    suggestion.status = status;
-    await suggestion.save();
-
-    // TODO: Send notification to suggestion author
-
-    res.json({ message: `Suggestion ${status} successfully`, suggestion });
-  } catch (error) {
-    console.error('Update suggestion error:', error);
-    res.status(500).json({ error: 'Update Failed', message: 'Failed to update suggestion status' });
   }
-});
+);
 
 /**
  * @route   GET /api/ideation/industries
  * @desc    Get predefined industries for dropdown
  * @access  Public
  */
-router.get('/industries', (req, res) => {
+router.get("/industries", (req, res) => {
   try {
     const industries = [
-      'Technology',
-      'Healthcare',
-      'Finance',
-      'Education',
-      'E-commerce',
-      'Manufacturing',
-      'Real Estate',
-      'Transportation',
-      'Energy',
-      'Agriculture',
-      'Entertainment',
-      'Food & Beverage',
-      'Fashion',
-      'Sports',
-      'Travel & Tourism',
-      'Automotive',
-      'Aerospace',
-      'Telecommunications',
-      'Media & Advertising',
-      'Consulting',
-      'Legal Services',
-      'Construction',
-      'Retail',
-      'Logistics',
-      'Pharmaceuticals',
-      'Biotechnology',
-      'Renewable Energy',
-      'Cybersecurity',
-      'Artificial Intelligence',
-      'Blockchain',
-      'Gaming',
-      'Social Media',
-      'SaaS',
-      'IoT',
-      'Robotics'
+      "Technology",
+      "Healthcare",
+      "Finance",
+      "Education",
+      "E-commerce",
+      "Manufacturing",
+      "Real Estate",
+      "Transportation",
+      "Energy",
+      "Agriculture",
+      "Entertainment",
+      "Food & Beverage",
+      "Fashion",
+      "Sports",
+      "Travel & Tourism",
+      "Automotive",
+      "Aerospace",
+      "Telecommunications",
+      "Media & Advertising",
+      "Consulting",
+      "Legal Services",
+      "Construction",
+      "Retail",
+      "Logistics",
+      "Pharmaceuticals",
+      "Biotechnology",
+      "Renewable Energy",
+      "Cybersecurity",
+      "Artificial Intelligence",
+      "Blockchain",
+      "Gaming",
+      "Social Media",
+      "SaaS",
+      "IoT",
+      "Robotics",
     ];
-    
-    res.json({
-      industries: industries.sort()
-    });
 
+    res.json({
+      industries: industries.sort(),
+    });
   } catch (error) {
-    console.error('Get industries error:', error);
+    console.error("Get industries error:", error);
     res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch industries'
+      error: "Fetch Failed",
+      message: "Failed to fetch industries",
     });
   }
 });
@@ -409,30 +543,29 @@ router.get('/industries', (req, res) => {
  * @desc    Get predefined stages for dropdown
  * @access  Public
  */
-router.get('/stages', (req, res) => {
+router.get("/stages", (req, res) => {
   try {
     const stages = [
-      'Idea',
-      'Concept',
-      'Prototype',
-      'MVP',
-      'Beta',
-      'Launch',
-      'Growth',
-      'Scale',
-      'Mature',
-      'Exit'
+      "Idea",
+      "Concept",
+      "Prototype",
+      "MVP",
+      "Beta",
+      "Launch",
+      "Growth",
+      "Scale",
+      "Mature",
+      "Exit",
     ];
-    
-    res.json({
-      stages: stages
-    });
 
+    res.json({
+      stages: stages,
+    });
   } catch (error) {
-    console.error('Get stages error:', error);
+    console.error("Get stages error:", error);
     res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch stages'
+      error: "Fetch Failed",
+      message: "Failed to fetch stages",
     });
   }
 });
@@ -442,13 +575,18 @@ router.get('/stages', (req, res) => {
  * @desc    Get available tags for ideation
  * @access  Public
  */
-router.get('/available-tags', async (req, res) => {
+router.get("/available-tags", async (req, res) => {
   try {
-    const tags = await Idea.distinct('tags');
+    const tags = await Idea.distinct("tags");
     res.json({ tags: (tags || []).sort() });
   } catch (error) {
-    console.error('Get available tags error:', error);
-    res.status(500).json({ error: 'Fetch Failed', message: 'Failed to fetch available tags' });
+    console.error("Get available tags error:", error);
+    res
+      .status(500)
+      .json({
+        error: "Fetch Failed",
+        message: "Failed to fetch available tags",
+      });
   }
 });
 
@@ -457,58 +595,57 @@ router.get('/available-tags', async (req, res) => {
  * @desc    Get predefined skills for team members
  * @access  Public
  */
-router.get('/skills', (req, res) => {
+router.get("/skills", (req, res) => {
   try {
     const skills = [
-      'Frontend Development',
-      'Backend Development',
-      'Full Stack Development',
-      'Mobile Development',
-      'UI/UX Design',
-      'Graphic Design',
-      'Product Management',
-      'Project Management',
-      'Marketing',
-      'Sales',
-      'Business Development',
-      'Data Science',
-      'Machine Learning',
-      'DevOps',
-      'Cloud Computing',
-      'Cybersecurity',
-      'Blockchain',
-      'AI/ML',
-      'Data Analytics',
-      'Quality Assurance',
-      'Content Writing',
-      'Digital Marketing',
-      'SEO',
-      'Social Media',
-      'Video Production',
-      'Photography',
-      'Finance',
-      'Accounting',
-      'Legal',
-      'Operations',
-      'Customer Success',
-      'Research',
-      'Strategy',
-      'Consulting',
-      'Training',
-      'Support',
-      'HR',
-      'Recruiting'
+      "Frontend Development",
+      "Backend Development",
+      "Full Stack Development",
+      "Mobile Development",
+      "UI/UX Design",
+      "Graphic Design",
+      "Product Management",
+      "Project Management",
+      "Marketing",
+      "Sales",
+      "Business Development",
+      "Data Science",
+      "Machine Learning",
+      "DevOps",
+      "Cloud Computing",
+      "Cybersecurity",
+      "Blockchain",
+      "AI/ML",
+      "Data Analytics",
+      "Quality Assurance",
+      "Content Writing",
+      "Digital Marketing",
+      "SEO",
+      "Social Media",
+      "Video Production",
+      "Photography",
+      "Finance",
+      "Accounting",
+      "Legal",
+      "Operations",
+      "Customer Success",
+      "Research",
+      "Strategy",
+      "Consulting",
+      "Training",
+      "Support",
+      "HR",
+      "Recruiting",
     ];
-    
-    res.json({
-      skills: skills.sort()
-    });
 
+    res.json({
+      skills: skills.sort(),
+    });
   } catch (error) {
-    console.error('Get skills error:', error);
+    console.error("Get skills error:", error);
     res.status(500).json({
-      error: 'Fetch Failed',
-      message: 'Failed to fetch skills'
+      error: "Fetch Failed",
+      message: "Failed to fetch skills",
     });
   }
 });
