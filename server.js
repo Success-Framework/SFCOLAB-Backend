@@ -54,7 +54,6 @@ const corsOptionsDelegate = (req, callback) => {
   callback(null, corsOptions);
 };
 
-// ✅ Apply CORS globally (for all routes including file uploads)
 app.use(cors(corsOptionsDelegate));
 app.options('*', cors(corsOptionsDelegate));
 
