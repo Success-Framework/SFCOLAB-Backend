@@ -1,5 +1,6 @@
 const express = require("express");
 const multer = require("multer");
+const path = require("path");
 const { authenticateToken, optionalAuth } = require("../middleware/auth");
 const { knowledgeValidation } = require("../middleware/validation");
 const {
@@ -17,7 +18,7 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const filetypes = /jpeg|jpg|png|gif/;
+    const filetypes = /jpeg|jpg|png|gif|pdf|doc|docx/;
     const mimetype = filetypes.test(file.mimetype);
     const extname = filetypes.test(
       path.extname(file.originalname).toLowerCase()
@@ -25,7 +26,7 @@ const upload = multer({
     if (mimetype && extname) {
       return cb(null, true);
     }
-    cb(new Error("Only images (jpeg, jpg, png, gif) are allowed"));
+    cb(new Error("Only PDF, DOC, DOCX, JPG, JPEG, gif, and PNG files are allowed"));
   },
 });
 
