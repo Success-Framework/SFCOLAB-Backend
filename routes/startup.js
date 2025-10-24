@@ -15,7 +15,7 @@ const router = express.Router();
 router.post('/register', authenticateToken, startupValidation.registerStartup, async (req, res) => {
   try {
     const { userId, firstName, lastName } = req.user;
-    const { name, industry, location, description, stage, logo, banner, roles = [] } = req.body;
+    const { name, industry, location, description, stage, logo, banner, roles = [], positions } = req.body;
 
     const nameExists = await Startup.findOne({ name: new RegExp(`^${name}$`, 'i') });
     if (nameExists) {
@@ -35,6 +35,7 @@ router.post('/register', authenticateToken, startupValidation.registerStartup, a
       stage,
       logo: logo || null,
       banner: banner || null,
+      positions: positions ? Number(positions) : 0,
       roles: Array.isArray(roles) ? roles : [],
       creator: { id: userId, firstName, lastName },
       status: 'active',
