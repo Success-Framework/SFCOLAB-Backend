@@ -226,7 +226,12 @@ const startupSchema = new mongoose.Schema(
     logo: { type: String },
     banner: { type: String },
     positions: { type: Number, default: 0 },
-    roles: [{ type: String }],
+    roles: [
+      {
+        title: { type: String, required: true },
+        roleType: { type: String, required: true },
+      },
+    ],
     creator: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       firstName: String,
