@@ -32,7 +32,11 @@ const userSchema = new mongoose.Schema(
       approvals: { type: Boolean, default: true },
       storyViews: { type: Boolean, default: true },
       postEngagement: { type: Boolean, default: true },
-      emailDigest: { type: String, enum: ["daily", "weekly", "monthly"], default: "weekly" },
+      emailDigest: {
+        type: String,
+        enum: ["daily", "weekly", "monthly"],
+        default: "weekly",
+      },
       quietHours: {
         enabled: { type: Boolean, default: false },
         start: { type: String, default: "22:00" },
@@ -69,7 +73,11 @@ const knowledgeSchema = new mongoose.Schema(
 /* ========================== KNOWLEDGE COMMENTS SCHEMA ========================== */
 const knowledgeCommentSchema = new mongoose.Schema(
   {
-    resourceId: { type: mongoose.Schema.Types.ObjectId, ref: "Knowledge", required: true },
+    resourceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Knowledge",
+      required: true,
+    },
     content: { type: String, required: true },
     author: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -83,8 +91,16 @@ const knowledgeCommentSchema = new mongoose.Schema(
 /* ========================== RESOURCE VIEWS SCHEMA ========================== */
 const resourceViewSchema = new mongoose.Schema(
   {
-    resourceId: { type: mongoose.Schema.Types.ObjectId, ref: "Knowledge", required: true },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    resourceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Knowledge",
+      required: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     viewedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
@@ -93,8 +109,16 @@ const resourceViewSchema = new mongoose.Schema(
 /* ========================== RESOURCE DOWNLOADS SCHEMA ========================== */
 const resourceDownloadSchema = new mongoose.Schema(
   {
-    resourceId: { type: mongoose.Schema.Types.ObjectId, ref: "Knowledge", required: true },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    resourceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Knowledge",
+      required: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     downloadedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
@@ -103,8 +127,16 @@ const resourceDownloadSchema = new mongoose.Schema(
 /* ========================== RESOURCE LIKES SCHEMA ========================== */
 const resourceLikeSchema = new mongoose.Schema(
   {
-    resourceId: { type: mongoose.Schema.Types.ObjectId, ref: "Knowledge", required: true },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    resourceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Knowledge",
+      required: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     likedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
@@ -141,7 +173,11 @@ const ideaSchema = new mongoose.Schema(
 /* ========================== IDEA COMMENTS SCHEMA ========================== */
 const ideaCommentSchema = new mongoose.Schema(
   {
-    ideaId: { type: mongoose.Schema.Types.ObjectId, ref: "Idea", required: true },
+    ideaId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Idea",
+      required: true,
+    },
     content: { type: String, required: true },
     author: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -155,14 +191,22 @@ const ideaCommentSchema = new mongoose.Schema(
 /* ========================== SUGGESTIONS SCHEMA ========================== */
 const suggestionSchema = new mongoose.Schema(
   {
-    ideaId: { type: mongoose.Schema.Types.ObjectId, ref: "Idea", required: true },
+    ideaId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Idea",
+      required: true,
+    },
     content: { type: String, required: true },
     author: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       firstName: String,
       lastName: String,
     },
-    status: { type: String, enum: ["pending", "accepted", "rejected"], default: "pending" },
+    status: {
+      type: String,
+      enum: ["pending", "accepted", "rejected"],
+      default: "pending",
+    },
   },
   { timestamps: true }
 );
@@ -174,9 +218,14 @@ const startupSchema = new mongoose.Schema(
     industry: { type: String, required: true },
     location: { type: String },
     description: { type: String },
-    stage: { type: String, enum: ["idea", "early", "growth", "scale"], default: "idea" },
+    stage: {
+      type: String,
+      enum: ["idea", "early", "growth", "scale"],
+      default: "idea",
+    },
     logo: { type: String },
     banner: { type: String },
+    positions: { type: Number, default: 0 },
     roles: [{ type: String }],
     creator: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -203,8 +252,16 @@ const startupSchema = new mongoose.Schema(
 /* ========================== STARTUP MEMBER SCHEMA ========================== */
 const startupMemberSchema = new mongoose.Schema(
   {
-    startupId: { type: mongoose.Schema.Types.ObjectId, ref: "Startup", required: true },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    startupId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Startup",
+      required: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     firstName: String,
     lastName: String,
     role: { type: String, default: "member" },
@@ -217,14 +274,26 @@ const startupMemberSchema = new mongoose.Schema(
 /* ========================== JOIN REQUEST SCHEMA ========================== */
 const joinRequestSchema = new mongoose.Schema(
   {
-    startupId: { type: mongoose.Schema.Types.ObjectId, ref: "Startup", required: true },
+    startupId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Startup",
+      required: true,
+    },
     startupName: { type: String },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     firstName: String,
     lastName: String,
     message: { type: String },
     role: { type: String, default: "member" },
-    status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
   },
   { timestamps: true }
 );
@@ -232,7 +301,11 @@ const joinRequestSchema = new mongoose.Schema(
 /* ========================== REFRESH TOKENS SCHEMA ========================== */
 const refreshTokenSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     token: { type: String, required: true },
     createdAt: { type: Date, default: Date.now },
   },
@@ -242,7 +315,11 @@ const refreshTokenSchema = new mongoose.Schema(
 /* ========================== NOTIFICATION SCHEMA ========================== */
 const notificationSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     type: { type: String, default: "system" },
     title: { type: String },
     message: { type: String },
@@ -256,7 +333,11 @@ const notificationSchema = new mongoose.Schema(
 /* ========================== PROFILE: STORIES & POSTS ========================== */
 const storySchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     author: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       firstName: String,
@@ -273,8 +354,16 @@ const storySchema = new mongoose.Schema(
 
 const storyViewSchema = new mongoose.Schema(
   {
-    storyId: { type: mongoose.Schema.Types.ObjectId, ref: "Story", required: true },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    storyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Story",
+      required: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     viewedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
@@ -282,15 +371,29 @@ const storyViewSchema = new mongoose.Schema(
 
 const postSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     author: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       firstName: String,
       lastName: String,
     },
     content: { type: String, required: true },
-    type: { type: String, enum: ["professional", "social"], default: "professional" },
-    mediaUrls: [{ type: String }],
+    type: {
+      type: String,
+      enum: ["professional", "social", "image", "video"],
+      default: "professional",
+    },
+    media: [
+      {
+        data: Buffer,
+        contentType: String,
+        fileName: String,
+      },
+    ],
     tags: [{ type: String }],
     likes: { type: Number, default: 0 },
     commentsCount: { type: Number, default: 0 },
@@ -302,8 +405,16 @@ const postSchema = new mongoose.Schema(
 
 const postLikeSchema = new mongoose.Schema(
   {
-    postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post", required: true },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    postId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Post",
+      required: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     likedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
@@ -311,7 +422,11 @@ const postLikeSchema = new mongoose.Schema(
 
 const postCommentSchema = new mongoose.Schema(
   {
-    postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post", required: true },
+    postId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Post",
+      required: true,
+    },
     content: { type: String, required: true },
     author: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -324,9 +439,21 @@ const postCommentSchema = new mongoose.Schema(
 
 const connectionSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    connectedUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    status: { type: String, enum: ["connected", "pending", "blocked"], default: "connected" },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    connectedUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ["connected", "pending", "blocked"],
+      default: "connected",
+    },
   },
   { timestamps: true }
 );
