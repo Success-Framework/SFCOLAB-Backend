@@ -258,8 +258,8 @@ async function main() {
         location: st.location,
         description: st.description,
         stage: st.stage || "idea",
-        logo: st.logo,
-        banner: st.banner,
+        logo: st.logo ? Buffer.from(st.logo, "base64") : null,
+        banner: st.banner ? Buffer.from(st.banner, "base64") : null,
         positions: st.positions ? Number(st.positions) : 0,
         roles: Array.isArray(st.roles) ? st.roles : [],
         creator: {
