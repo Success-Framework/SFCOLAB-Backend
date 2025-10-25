@@ -223,15 +223,24 @@ const startupSchema = new mongoose.Schema(
       enum: ["idea", "early", "growth", "scale"],
       default: "idea",
     },
-    logo: { type: String },
-    banner: { type: String },
+    logo: {
+      data: Buffer,
+      contentType: String,
+    },
+    banner: {
+      data: Buffer,
+      contentType: String,
+    },
     positions: { type: Number, default: 0 },
-    roles: [
-      {
-        title: { type: String, required: true },
-        roleType: { type: String, required: true },
-      },
-    ],
+    roles: {
+      type: [
+        {
+          title: { type: String, required: true, trim: true },
+          roleType: { type: String, required: true, trim: true },
+        },
+      ],
+      default: [],
+    },
     creator: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       firstName: String,
