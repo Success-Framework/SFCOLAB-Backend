@@ -5,6 +5,8 @@ const { authenticateToken, optionalAuth } = require("../middleware/auth");
 const { startupValidation } = require("../middleware/validation");
 const { Startup, StartupMember, JoinRequest } = require("../models/schemas");
 
+const router = express.Router();
+
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
