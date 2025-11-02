@@ -650,4 +650,64 @@ router.get("/skills", (req, res) => {
   }
 });
 
+
+/**
+ * @route   POST /api/ideation/:id/like
+ * @desc    Like or unlike an idea
+ * @access  Private
+ */
+router.post('/:id/like', authenticateToken, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.user;
+
+    const idea = findInCollection('ideas', i => i.id === id);
+    if (!idea) {
+      return res.status(404).json({
+        error: 'Idea Not Found',
+        message: 'Idea not found',
+      });
+    }
+
+    // Initialize likes array if it doesn’t exist
+    if (!Array.isArray(idea.likedBy)) {
+      idea.likedBy = [];
+    }
+
+    let updatedLikes;
+
+    // Toggle like/unlike
+    if (idea.likedBy.includes(userId)) {
+      // Unlike
+      idea.likedBy = idea.likedBy.filter(id => id !== userId);
+      updatedLikes = idea.likedBy.length;
+    } else {
+      // Like
+      idea.likedBy.push(userId);
+      updatedLikes = idea.likedBy.length;
+    }
+
+    updateItemInCollection('ideas', id, {
+      likedBy: idea.likedBy,
+      likes: updatedLikes,
+    });
+
+    res.json({
+      message: idea.likedBy.includes(userId)
+        ? 'Idea liked successfully'
+        : 'Idea unliked successfully',
+      likes: updatedLikes,
+      likedByUser: idea.likedBy.includes(userId),
+    });
+  } catch (error) {
+    console.error('Like error:', error);
+    res.status(500).json({
+      error: 'Like Failed',
+      message: 'Failed to like/unlike idea',
+    });
+  }
+});
+
+
+
 module.exports = router;
