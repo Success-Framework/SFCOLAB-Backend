@@ -656,68 +656,47 @@ router.get("/skills", (req, res) => {
  * @desc    Like or unlike an idea
  * @access  Private
  */
-router.post('/:id/like', authenticateToken, (req, res) => {
+router.post('/:id/like', authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params; // idea id from URL
-
-    // Handle both token structures { userId: ... } or { id: ... }
+    const { id } = req.params;
     const userId = req.user?.userId || req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User ID missing from token payload'
-      });
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const idea = findInCollection('ideas', i => i.id === id);
-
+    const idea = await Idea.findById(id);
     if (!idea) {
-      return res.status(404).json({
-        error: 'Idea Not Found',
-        message: 'Idea not found'
-      });
+      return res.status(404).json({ error: 'Idea not found' });
     }
 
-    // Ensure likedBy array always exists
-    if (!Array.isArray(idea.likedBy)) {
-      idea.likedBy = [];
-    }
+    // Check if user already liked the idea
+    const likedIndex = idea.likedBy?.indexOf(userId);
 
-    // Toggle like/unlike
-    if (idea.likedBy.includes(userId)) {
-      // Unlike
-      idea.likedBy = idea.likedBy.filter(uid => uid !== userId);
+    if (likedIndex !== -1 && likedIndex !== undefined) {
+      // Unlike it
+      idea.likedBy.splice(likedIndex, 1);
+      idea.likes = Math.max(idea.likes - 1, 0);
     } else {
-      // Like
+      // Like it
+      if (!idea.likedBy) idea.likedBy = [];
       idea.likedBy.push(userId);
+      idea.likes = (idea.likes || 0) + 1;
     }
 
-    const updatedLikes = idea.likedBy.length;
+    await idea.save();
 
-    // Update in your local collection or DB
-    updateItemInCollection('ideas', id, {
-      likedBy: idea.likedBy,
-      likes: updatedLikes,
+    res.json({
+      message: likedIndex === -1 ? 'Idea liked successfully' : 'Idea unliked successfully',
+      likes: idea.likes,
+      likedByUser: likedIndex === -1,
     });
-
-    // Send updated data back
-    res.status(200).json({
-      message: idea.likedBy.includes(userId)
-        ? 'Idea liked successfully'
-        : 'Idea unliked successfully',
-      likes: updatedLikes,
-      likedByUser: idea.likedBy.includes(userId),
-    });
-
   } catch (error) {
-    console.error('Like error:', error);
-    res.status(500).json({
-      error: 'Like Failed',
-      message: error.message || 'Failed to like/unlike idea',
-    });
+    console.error('Error liking idea:', error);
+    res.status(500).json({ error: 'Like Failed', message: error.message });
   }
 });
+
 
 
 
