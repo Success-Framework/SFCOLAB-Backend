@@ -165,6 +165,7 @@ const ideaSchema = new mongoose.Schema(
     },
     status: { type: String, enum: ["active", "inactive"], default: "active" },
     likes: { type: Number, default: 0 },
+    likedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     views: { type: Number, default: 0 },
   },
   { timestamps: true }
