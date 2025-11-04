@@ -658,55 +658,67 @@ router.get("/skills", (req, res) => {
  */
 router.post('/:id/like', authenticateToken, (req, res) => {
   try {
-    const { id } = req.params;
-    const { userId } = req.user;
+    const { id } = req.params; // idea id from URL
 
-    const idea = findInCollection('ideas', i => i.id === id);
-    if (!idea) {
-      return res.status(404).json({
-        error: 'Idea Not Found',
-        message: 'Idea not found',
+    // Handle both token structures { userId: ... } or { id: ... }
+    const userId = req.user?.userId || req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User ID missing from token payload'
       });
     }
 
-    // Initialize likes array if it doesn’t exist
+    const idea = findInCollection('ideas', i => i.id === id);
+
+    if (!idea) {
+      return res.status(404).json({
+        error: 'Idea Not Found',
+        message: 'Idea not found'
+      });
+    }
+
+    // Ensure likedBy array always exists
     if (!Array.isArray(idea.likedBy)) {
       idea.likedBy = [];
     }
 
-    let updatedLikes;
-
     // Toggle like/unlike
     if (idea.likedBy.includes(userId)) {
       // Unlike
-      idea.likedBy = idea.likedBy.filter(id => id !== userId);
-      updatedLikes = idea.likedBy.length;
+      idea.likedBy = idea.likedBy.filter(uid => uid !== userId);
     } else {
       // Like
       idea.likedBy.push(userId);
-      updatedLikes = idea.likedBy.length;
     }
 
+    const updatedLikes = idea.likedBy.length;
+
+    // Update in your local collection or DB
     updateItemInCollection('ideas', id, {
       likedBy: idea.likedBy,
       likes: updatedLikes,
     });
 
-    res.json({
+    // Send updated data back
+    res.status(200).json({
       message: idea.likedBy.includes(userId)
         ? 'Idea liked successfully'
         : 'Idea unliked successfully',
       likes: updatedLikes,
       likedByUser: idea.likedBy.includes(userId),
     });
+
   } catch (error) {
     console.error('Like error:', error);
     res.status(500).json({
       error: 'Like Failed',
-      message: 'Failed to like/unlike idea',
+      message: error.message || 'Failed to like/unlike idea',
     });
   }
 });
+
 
 
 
