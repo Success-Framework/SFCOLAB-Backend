@@ -117,26 +117,30 @@ router.post(
 
 /**
  * @route   GET /api/ideation/bookmarks
- * @desc    Get bookmarks for authenticated user
- * @access  Public
+ * @desc    Get bookmarks for authenticated user (ideas only)
+ * @access  Private
  */
-
 router.get("/bookmarks", authenticateToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const user = await User.findById(userId);
+
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
+    // Return only ideas bookmarks for this route
+    const ideaBookmarks = user.bookmarks?.ideas || [];
+
     res.json({
-      bookmarks: user.bookmarks || [],
+      bookmarks: ideaBookmarks,
+      total: ideaBookmarks.length,
     });
   } catch (error) {
-    console.error("Get bookmarks error:", error);
+    console.error("Get idea bookmarks error:", error);
     res.status(500).json({
       error: "Fetch Failed",
-      message: "Failed to fetch bookmarks",
+      message: "Failed to fetch idea bookmarks",
     });
   }
 });
@@ -707,10 +711,9 @@ router.post("/:id/like", authenticateToken, async (req, res) => {
 
 /**
  * @route   POST /api/ideation/:id/bookmark
- * @desc    Inserts bookmark of an authenticated user
- * @access  Public
+ * @desc    Toggle bookmark for an idea
+ * @access  Private
  */
-
 router.post("/:id/bookmark", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params; // Idea ID
@@ -726,33 +729,48 @@ router.post("/:id/bookmark", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    if (!user.bookmarks) user.bookmarks = [];
+    // Ensure the bookmarks object exists
+    if (!user.bookmarks) user.bookmarks = { ideas: [], knowledge: [] };
+    if (!Array.isArray(user.bookmarks.ideas)) user.bookmarks.ideas = [];
 
-    // Check if the idea is already bookmarked
-    const existingIndex = user.bookmarks.findIndex(
-      (b) => b.ideaId.toString() === id
+    // Check if idea is already bookmarked
+    const existingIndex = user.bookmarks.ideas.findIndex(
+      (b) => b.ideaId?.toString() === id
     );
 
     if (existingIndex !== -1) {
-      user.bookmarks.splice(existingIndex, 1);
+      // Remove bookmark
+      user.bookmarks.ideas.splice(existingIndex, 1);
       await user.save();
-      return res.json({ message: "Bookmark removed successfully" });
+
+      return res.json({
+        message: "Bookmark removed successfully",
+        bookmarked: false,
+      });
     } else {
+      // Add new bookmark
       const contentPreview =
         idea.description?.substring(0, 120) +
-        (idea.description.length > 120 ? "..." : "");
-      user.bookmarks.push({
+        (idea.description?.length > 120 ? "..." : "");
+
+      const newBookmark = {
         ideaId: idea._id,
         title: idea.title,
         contentPreview,
         url: `/ideation-details?id=${idea._id}`,
         createdAt: new Date(),
-      });
+      };
+
+      user.bookmarks.ideas.push(newBookmark);
       await user.save();
-      return res.json({ message: "Idea bookmarked successfully" });
+
+      return res.json({
+        message: "Idea bookmarked successfully",
+        bookmarked: true,
+      });
     }
   } catch (error) {
-    console.error("Bookmark error:", error);
+    console.error("Bookmark toggle error:", error);
     res.status(500).json({
       error: "Bookmark Failed",
       message: "Failed to toggle bookmark",
