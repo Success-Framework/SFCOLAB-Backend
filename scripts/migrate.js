@@ -57,27 +57,53 @@ async function main() {
         firstName: u.firstName,
         lastName: u.lastName,
         email: u.email,
-        password: u.password, // already hashed in json
+        password: u.password, // already hashed in JSON
         isEmailVerified: !!u.isEmailVerified,
         lastLogin: u.lastLogin ? new Date(u.lastLogin) : null,
         status: u.status || "active",
+
         profile: u.profile || {
           picture: null,
           bio: null,
           company: null,
           socialLinks: {},
         },
+
         preferences: u.preferences || undefined,
         notificationSettings: u.notificationSettings || undefined,
+
+        bookmarks: {
+          ideas: Array.isArray(u.bookmarks?.ideas)
+            ? u.bookmarks.ideas.map((b) => ({
+                ideaId: b.ideaId || null,
+                title: b.title || "",
+                contentPreview: b.contentPreview || "",
+                url: b.url || "",
+                createdAt: b.createdAt ? new Date(b.createdAt) : new Date(),
+              }))
+            : [],
+          knowledge: Array.isArray(u.bookmarks?.knowledge)
+            ? u.bookmarks.knowledge.map((b) => ({
+                knowledgeId: b.knowledgeId || null,
+                title: b.title || "",
+                contentPreview: b.contentPreview || "",
+                url: b.url || "",
+                createdAt: b.createdAt ? new Date(b.createdAt) : new Date(),
+              }))
+            : [],
+        },
       };
+
       const saved = await User.findOneAndUpdate({ email: u.email }, update, {
         upsert: true,
         new: true,
         setDefaultsOnInsert: true,
       });
+
       idMap.set(u.id, saved._id);
     }
-    console.log(`Users migrated: ${data.users.length}`);
+
+    console.log(` Users migrated: ${data.users.length}`);
   }
 
   // Refresh Tokens

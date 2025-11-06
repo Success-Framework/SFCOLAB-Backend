@@ -1,7 +1,7 @@
 const express = require("express");
 const { authenticateToken, optionalAuth } = require("../middleware/auth");
 const { ideationValidation } = require("../middleware/validation");
-const { Idea, IdeaComment, Suggestion } = require("../models/schemas");
+const { Idea, IdeaComment, Suggestion, User } = require("../models/schemas");
 
 const router = express.Router();
 
@@ -116,6 +116,32 @@ router.post(
 );
 
 /**
+ * @route   GET /api/ideation/bookmarks
+ * @desc    Get bookmarks for authenticated user
+ * @access  Public
+ */
+
+router.get("/bookmarks", authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({
+      bookmarks: user.bookmarks || [],
+    });
+  } catch (error) {
+    console.error("Get bookmarks error:", error);
+    res.status(500).json({
+      error: "Fetch Failed",
+      message: "Failed to fetch bookmarks",
+    });
+  }
+});
+
+/**
  * @route   GET /api/ideation/:id
  * @desc    Get idea by ID with comments
  * @access  Public
@@ -181,12 +207,10 @@ router.put(
           .json({ error: "Idea Not Found", message: "Idea not found" });
 
       if (idea.creator.id.toString() !== userId) {
-        return res
-          .status(403)
-          .json({
-            error: "Forbidden",
-            message: "You can only update your own ideas",
-          });
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "You can only update your own ideas",
+        });
       }
 
       idea.title = title;
@@ -226,12 +250,10 @@ router.delete("/:id", authenticateToken, async (req, res) => {
         .status(404)
         .json({ error: "Idea Not Found", message: "Idea not found" });
     if (idea.creator.id.toString() !== userId) {
-      return res
-        .status(403)
-        .json({
-          error: "Forbidden",
-          message: "You can only delete your own ideas",
-        });
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "You can only delete your own ideas",
+      });
     }
 
     await Idea.findByIdAndDelete(id);
@@ -348,12 +370,10 @@ router.post(
           .status(404)
           .json({ error: "Idea Not Found", message: "Idea not found" });
       if (idea.creator.id.toString() === userId) {
-        return res
-          .status(400)
-          .json({
-            error: "Invalid Action",
-            message: "You cannot suggest improvements to your own idea",
-          });
+        return res.status(400).json({
+          error: "Invalid Action",
+          message: "You cannot suggest improvements to your own idea",
+        });
       }
 
       const suggestion = await Suggestion.create({
@@ -368,12 +388,10 @@ router.post(
         .json({ message: "Suggestion submitted successfully", suggestion });
     } catch (error) {
       console.error("Submit suggestion error:", error);
-      res
-        .status(500)
-        .json({
-          error: "Suggestion Failed",
-          message: "Failed to submit suggestion",
-        });
+      res.status(500).json({
+        error: "Suggestion Failed",
+        message: "Failed to submit suggestion",
+      });
     }
   }
 );
@@ -394,12 +412,10 @@ router.get("/:id/suggestions", authenticateToken, async (req, res) => {
         .status(404)
         .json({ error: "Idea Not Found", message: "Idea not found" });
     if (idea.creator.id.toString() !== userId) {
-      return res
-        .status(403)
-        .json({
-          error: "Forbidden",
-          message: "Only the idea creator can view suggestions",
-        });
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "Only the idea creator can view suggestions",
+      });
     }
 
     const ideaSuggestions = await Suggestion.find({ ideaId: id }).sort({
@@ -429,12 +445,10 @@ router.put(
       const { status } = req.body;
 
       if (!["accepted", "rejected"].includes(status)) {
-        return res
-          .status(400)
-          .json({
-            error: "Invalid Status",
-            message: 'Status must be either "accepted" or "rejected"',
-          });
+        return res.status(400).json({
+          error: "Invalid Status",
+          message: 'Status must be either "accepted" or "rejected"',
+        });
       }
 
       const idea = await Idea.findById(id);
@@ -443,12 +457,10 @@ router.put(
           .status(404)
           .json({ error: "Idea Not Found", message: "Idea not found" });
       if (idea.creator.id.toString() !== userId) {
-        return res
-          .status(403)
-          .json({
-            error: "Forbidden",
-            message: "Only the idea creator can update suggestion status",
-          });
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "Only the idea creator can update suggestion status",
+        });
       }
 
       const suggestion = await Suggestion.findOne({
@@ -456,12 +468,10 @@ router.put(
         ideaId: id,
       });
       if (!suggestion)
-        return res
-          .status(404)
-          .json({
-            error: "Suggestion Not Found",
-            message: "Suggestion not found",
-          });
+        return res.status(404).json({
+          error: "Suggestion Not Found",
+          message: "Suggestion not found",
+        });
 
       suggestion.status = status;
       await suggestion.save();
@@ -471,12 +481,10 @@ router.put(
       res.json({ message: `Suggestion ${status} successfully`, suggestion });
     } catch (error) {
       console.error("Update suggestion error:", error);
-      res
-        .status(500)
-        .json({
-          error: "Update Failed",
-          message: "Failed to update suggestion status",
-        });
+      res.status(500).json({
+        error: "Update Failed",
+        message: "Failed to update suggestion status",
+      });
     }
   }
 );
@@ -581,12 +589,10 @@ router.get("/available-tags", async (req, res) => {
     res.json({ tags: (tags || []).sort() });
   } catch (error) {
     console.error("Get available tags error:", error);
-    res
-      .status(500)
-      .json({
-        error: "Fetch Failed",
-        message: "Failed to fetch available tags",
-      });
+    res.status(500).json({
+      error: "Fetch Failed",
+      message: "Failed to fetch available tags",
+    });
   }
 });
 
@@ -650,24 +656,23 @@ router.get("/skills", (req, res) => {
   }
 });
 
-
 /**
  * @route   POST /api/ideation/:id/like
  * @desc    Like or unlike an idea
  * @access  Private
  */
-router.post('/:id/like', authenticateToken, async (req, res) => {
+router.post("/:id/like", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user?.userId || req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const idea = await Idea.findById(id);
     if (!idea) {
-      return res.status(404).json({ error: 'Idea not found' });
+      return res.status(404).json({ error: "Idea not found" });
     }
 
     // Check if user already liked the idea
@@ -687,18 +692,72 @@ router.post('/:id/like', authenticateToken, async (req, res) => {
     await idea.save();
 
     res.json({
-      message: likedIndex === -1 ? 'Idea liked successfully' : 'Idea unliked successfully',
+      message:
+        likedIndex === -1
+          ? "Idea liked successfully"
+          : "Idea unliked successfully",
       likes: idea.likes,
       likedByUser: likedIndex === -1,
     });
   } catch (error) {
-    console.error('Error liking idea:', error);
-    res.status(500).json({ error: 'Like Failed', message: error.message });
+    console.error("Error liking idea:", error);
+    res.status(500).json({ error: "Like Failed", message: error.message });
   }
 });
 
+/**
+ * @route   POST /api/ideation/:id/bookmark
+ * @desc    Inserts bookmark of an authenticated user
+ * @access  Public
+ */
 
+router.post("/:id/bookmark", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params; // Idea ID
+    const { userId } = req.user;
 
+    const idea = await Idea.findById(id);
+    if (!idea) {
+      return res.status(404).json({ error: "Idea not found" });
+    }
 
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (!user.bookmarks) user.bookmarks = [];
+
+    // Check if the idea is already bookmarked
+    const existingIndex = user.bookmarks.findIndex(
+      (b) => b.ideaId.toString() === id
+    );
+
+    if (existingIndex !== -1) {
+      user.bookmarks.splice(existingIndex, 1);
+      await user.save();
+      return res.json({ message: "Bookmark removed successfully" });
+    } else {
+      const contentPreview =
+        idea.description?.substring(0, 120) +
+        (idea.description.length > 120 ? "..." : "");
+      user.bookmarks.push({
+        ideaId: idea._id,
+        title: idea.title,
+        contentPreview,
+        url: `/ideation-details?id=${idea._id}`,
+        createdAt: new Date(),
+      });
+      await user.save();
+      return res.json({ message: "Idea bookmarked successfully" });
+    }
+  } catch (error) {
+    console.error("Bookmark error:", error);
+    res.status(500).json({
+      error: "Bookmark Failed",
+      message: "Failed to toggle bookmark",
+    });
+  }
+});
 
 module.exports = router;
