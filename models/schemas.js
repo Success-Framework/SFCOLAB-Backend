@@ -10,12 +10,14 @@ const userSchema = new mongoose.Schema(
     isEmailVerified: { type: Boolean, default: false },
     lastLogin: { type: Date, default: null },
     status: { type: String, enum: ["active", "deleted"], default: "active" },
+
     profile: {
       picture: { type: String, default: null },
       bio: { type: String, default: null },
       company: { type: String, default: null },
       socialLinks: { type: Map, of: String, default: {} },
     },
+
     preferences: {
       emailNotifications: { type: Boolean, default: true },
       pushNotifications: { type: Boolean, default: true },
@@ -24,6 +26,7 @@ const userSchema = new mongoose.Schema(
       timezone: { type: String, default: "UTC" },
       theme: { type: String, enum: ["light", "dark"], default: "light" },
     },
+
     notificationSettings: {
       newComments: { type: Boolean, default: true },
       newLikes: { type: Boolean, default: true },
@@ -42,6 +45,30 @@ const userSchema = new mongoose.Schema(
         start: { type: String, default: "22:00" },
         end: { type: String, default: "08:00" },
       },
+    },
+
+    bookmarks: {
+      ideas: [
+        {
+          ideaId: { type: mongoose.Schema.Types.ObjectId, ref: "Idea" },
+          title: String,
+          contentPreview: String,
+          url: String,
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      knowledge: [
+        {
+          knowledgeId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Knowledge",
+          },
+          title: String,
+          contentPreview: String,
+          url: String,
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
     },
   },
   { timestamps: true }
