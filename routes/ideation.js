@@ -730,7 +730,7 @@ router.post("/:id/bookmark", authenticateToken, async (req, res) => {
     }
 
     // Ensure the bookmarks object exists
-    if (!user.bookmarks) user.bookmarks = { ideas: [], knowledge: [] };
+    if (!user.bookmarks) user.bookmarks = { ideas: [] };
     if (!Array.isArray(user.bookmarks.ideas)) user.bookmarks.ideas = [];
 
     // Check if idea is already bookmarked
@@ -758,7 +758,6 @@ router.post("/:id/bookmark", authenticateToken, async (req, res) => {
         title: idea.title,
         contentPreview,
         url: `/ideation-details?id=${idea._id}`,
-        createdAt: new Date(),
       };
 
       user.bookmarks.ideas.push(newBookmark);

@@ -9,6 +9,7 @@ const {
   ResourceView,
   ResourceDownload,
   ResourceLike,
+  User,
 } = require("../models/schemas");
 
 const router = express.Router();
@@ -141,6 +142,36 @@ router.post(
     }
   }
 );
+
+/**
+ * @route   GET /api/knowledge/bookmarks
+ * @desc    Get bookmarks for authenticated user
+ * @access  Private
+ */
+router.get("/bookmarks", authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Return only knowledge bookmarks for this route
+    const knowledgeBookmarks = user.bookmarks?.knowledge || [];
+
+    res.json({
+      bookmarks: knowledgeBookmarks,
+      total: knowledgeBookmarks.length,
+    });
+  } catch (error) {
+    console.error("Get knowledge bookmarks error:", error);
+    res.status(500).json({
+      error: "Fetch Failed",
+      message: "Failed to fetch knowledge bookmarks",
+    });
+  }
+});
 
 /**
  * @route   GET /api/knowledge/categories
@@ -699,6 +730,74 @@ router.get("/:id/likes", async (req, res) => {
     res
       .status(500)
       .json({ error: "Fetch Failed", message: "Failed to fetch likes" });
+  }
+});
+
+/**
+ * @route   POST /api/knowledge/:id/bookmark
+ * @desc    Toggle bookmark for knowledge
+ * @access  Private
+ */
+router.post("/:id/bookmark", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params; // Knowledge ID
+    const { userId } = req.user;
+
+    const knowledge = await Knowledge.findById(id);
+    if (!knowledge) {
+      return res.status(404).json({ error: "Knowledge not found" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Ensure the bookmarks object exists
+    if (!user.bookmarks) user.bookmarks = { knowledge: [] };
+    if (!Array.isArray(user.bookmarks.knowledge)) user.bookmarks.knowledge = [];
+
+    // Check if knowledge is already bookmarked
+    const existingIndex = user.bookmarks.knowledge.findIndex(
+      (b) => b.knowledgeId?.toString() === id
+    );
+
+    if (existingIndex !== -1) {
+      // Remove bookmark
+      user.bookmarks.knowledge.splice(existingIndex, 1);
+      await user.save();
+
+      return res.json({
+        message: "Bookmark removed successfully",
+        bookmarked: false,
+      });
+    } else {
+      // Add new bookmark
+      const contentPreview =
+        knowledge.contentPreview?.substring(0, 120) +
+        (knowledge.contentPreview?.length > 120 ? "..." : "");
+
+      const newBookmark = {
+        knowledgeId: knowledge._id,
+        title: knowledge.title,
+        contentPreview,
+        url: `/knowledge-details?id=${knowledge._id}`,
+      };
+
+      user.bookmarks.knowledge.push(newBookmark);
+      await user.save();
+
+      return res.json({
+        message: "Knowledge bookmarked successfully",
+        bookmarked: true,
+      });
+    }
+  } catch (error) {
+    console.error("Bookmark toggle error:", error);
+    res.status(500).json({
+      error: "Bookmark Failed",
+      message: "Failed to toggle bookmark",
+    });
   }
 });
 
