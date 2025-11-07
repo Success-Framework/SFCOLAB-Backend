@@ -69,6 +69,18 @@ const userSchema = new mongoose.Schema(
           createdAt: { type: Date, default: Date.now },
         },
       ],
+      startup: [
+        {
+          startupId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Startup",
+          },
+          title: String,
+          contentPreview: String,
+          url: String,
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
     },
   },
   { timestamps: true }

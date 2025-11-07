@@ -3,14 +3,19 @@ const multer = require("multer");
 const path = require("path");
 const { authenticateToken, optionalAuth } = require("../middleware/auth");
 const { startupValidation } = require("../middleware/validation");
-const { Startup, StartupMember, JoinRequest } = require("../models/schemas");
+const {
+  Startup,
+  StartupMember,
+  JoinRequest,
+  User,
+} = require("../models/schemas");
 
 const router = express.Router();
 
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, 
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png|gif/;
     const mimetype = filetypes.test(file.mimetype);
@@ -178,6 +183,35 @@ router.get("/", optionalAuth, async (req, res) => {
   }
 });
 
+/**
+ * @route   GET /api/startup/bookmarks
+ * @desc    Get bookmarks for authenticated user
+ * @access  Private
+ */
+router.get("/bookmarks", authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Return only knowledge bookmarks for this route
+    const startupBookmarks = user.bookmarks?.startup || [];
+
+    res.json({
+      bookmarks: startupBookmarks,
+      total: startupBookmarks.length,
+    });
+  } catch (error) {
+    console.error("Get startup bookmarks error:", error);
+    res.status(500).json({
+      error: "Fetch Failed",
+      message: "Failed to fetch startup bookmarks",
+    });
+  }
+});
 /**
  * @route   GET /api/startup/:id
  * @desc    Get startup by ID with details
@@ -525,6 +559,74 @@ router.get("/user/memberships", authenticateToken, async (req, res) => {
     res.status(500).json({
       error: "Fetch Failed",
       message: "Failed to fetch user memberships",
+    });
+  }
+});
+
+/**
+ * @route   POST /api/startup/:id/bookmark
+ * @desc    Toggle bookmark for startup
+ * @access  Private
+ */
+router.post("/:id/bookmark", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params; // startup ID
+    const { userId } = req.user;
+
+    const startup = await Startup.findById(id);
+    if (!startup) {
+      return res.status(404).json({ error: "Knowledge not found" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Ensure the bookmarks object exists
+    if (!user.bookmarks) user.bookmarks = { startup: [] };
+    if (!Array.isArray(user.bookmarks.startup)) user.bookmarks.startup = [];
+
+    // Check if startup is already bookmarked
+    const existingIndex = user.bookmarks.startup.findIndex(
+      (b) => b.startupId?.toString() === id
+    );
+
+    if (existingIndex !== -1) {
+      // Remove bookmark
+      user.bookmarks.startup.splice(existingIndex, 1);
+      await user.save();
+
+      return res.json({
+        message: "Bookmark removed successfully",
+        bookmarked: false,
+      });
+    } else {
+      // Add new bookmark
+      const contentPreview =
+        startup.description?.substring(0, 120) +
+        (startup.description?.length > 120 ? "..." : "");
+
+      const newBookmark = {
+        startupId: startup._id,
+        title: startup.title,
+        contentPreview,
+        url: `/startup-details?id=${startup._id}`,
+      };
+
+      user.bookmarks.startup.push(newBookmark);
+      await user.save();
+
+      return res.json({
+        message: "Startup bookmarked successfully",
+        bookmarked: true,
+      });
+    }
+  } catch (error) {
+    console.error("Bookmark toggle error:", error);
+    res.status(500).json({
+      error: "Bookmark Failed",
+      message: "Failed to toggle bookmark",
     });
   }
 });
