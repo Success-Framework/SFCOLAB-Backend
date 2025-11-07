@@ -607,9 +607,12 @@ router.post("/:id/bookmark", authenticateToken, async (req, res) => {
         startup.description?.substring(0, 120) +
         (startup.description?.length > 120 ? "..." : "");
 
+        // stored the startup name as title
+      const title = startup.name;
+
       const newBookmark = {
         startupId: startup._id,
-        title: startup.title,
+        title,
         contentPreview,
         url: `/startup-details?id=${startup._id}`,
       };
