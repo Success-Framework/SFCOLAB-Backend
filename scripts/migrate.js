@@ -91,6 +91,15 @@ async function main() {
                 createdAt: b.createdAt ? new Date(b.createdAt) : new Date(),
               }))
             : [],
+          startup: Array.isArray(u.bookmarks?.startup)
+            ? u.bookmarks.startup.map((b) => ({
+                startupId: b.startupId || null,
+                title: b.title || "",
+                contentPreview: b.contentPreview || "",
+                url: b.url || "",
+                createdAt: b.createdAt ? new Date(b.createdAt) : new Date(),
+              }))
+            : [],
         },
       };
 
