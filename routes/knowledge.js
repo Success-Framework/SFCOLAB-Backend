@@ -328,13 +328,13 @@ router.get("/user/resources", authenticateToken, async (req, res) => {
 
 /**
  * @route   GET /api/knowledge/:id
- * @desc    Get knowledge resource by ID with comments
+ * @desc    Get knowledge resource by ID with comments and dynamic view tracking
  * @access  Public
  */
 router.get("/:id", optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.user || {};
+    const userId = req.user ? req.user.userId : null;
 
     const resource = await Knowledge.findById(id);
     if (!resource) {
@@ -344,22 +344,31 @@ router.get("/:id", optionalAuth, async (req, res) => {
       });
     }
 
-    // Increment view count and track view if authenticated and not author
-    if (userId && userId !== resource.author.id.toString()) {
-      await Knowledge.findByIdAndUpdate(id, { $inc: { views: 1 } });
+    // Track unique views
+    if (userId && userId.toString() !== resource.author.id.toString()) {
       const existingView = await ResourceView.findOne({
         resourceId: id,
         userId,
       });
+
       if (!existingView) {
+        // Record new view
         await ResourceView.create({
           resourceId: id,
           userId,
           viewedAt: new Date(),
         });
+
+        // Increment view count in Knowledge
+        await Knowledge.findByIdAndUpdate(id, { $inc: { views: 1 } });
+        resource.views += 1; // reflect update in returned response
       }
     }
 
+    //  Get total number of views (even if user isn't logged in)
+    const totalViews = await ResourceView.countDocuments({ resourceId: id });
+
+    //  Fetch comments
     const comments = await KnowledgeComment.find({ resourceId: id }).sort({
       createdAt: -1,
     });
@@ -367,6 +376,7 @@ router.get("/:id", optionalAuth, async (req, res) => {
     res.json({
       resource: {
         ...resource.toObject(),
+        views: totalViews, // ensure latest view count
         comments,
       },
     });
@@ -378,6 +388,7 @@ router.get("/:id", optionalAuth, async (req, res) => {
     });
   }
 });
+
 
 /**
  * @route   PUT /api/knowledge/:id
