@@ -1,6 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 const { authenticateToken, optionalAuth } = require("../middleware/auth");
 const { knowledgeValidation } = require("../middleware/validation");
 const {
@@ -608,34 +609,33 @@ router.get("/:id/comments", async (req, res) => {
  * @desc    Track unique resource download (increments only once per user)
  * @access  Private
  */
+
+
+// POST /api/knowledge/:id/download
 router.post("/:id/download", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.user;
 
+    // Find the resource
     const resource = await Knowledge.findById(id);
     if (!resource) {
-      return res.status(404).json({
-        error: "Resource Not Found",
-        message: "Knowledge resource not found",
-      });
+      return res.status(404).json({ error: "Resource not found" });
     }
 
-    // Check if this user already downloaded it
+    // Record unique download
     const existingDownload = await ResourceDownload.findOne({
       resourceId: id,
       userId,
     });
 
     if (!existingDownload) {
-      // Record new unique download
       await ResourceDownload.create({
         resourceId: id,
         userId,
         downloadedAt: new Date(),
       });
 
-      // Increment Knowledge.downloads count
       await Knowledge.findByIdAndUpdate(id, { $inc: { downloads: 1 } });
       resource.downloads += 1;
     }
@@ -645,20 +645,32 @@ router.post("/:id/download", authenticateToken, async (req, res) => {
       resourceId: id,
     });
 
-    res.json({
-      message: existingDownload
-        ? "Download already recorded for this user"
-        : "Download tracked successfully",
-      downloads: totalDownloads,
-    });
-  } catch (error) {
-    console.error("Track download error:", error);
-    res.status(500).json({
-      error: "Tracking Failed",
-      message: "Failed to track download",
-    });
+    // Send the actual file
+    // Make sure `resource.fileUrl` stores only the filename, e.g., 'example.pdf'
+    const filePath = path.join(__dirname, "..", "uploads", resource.fileUrl);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "File not found on server" });
+    }
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${resource.fileUrl}"`
+    );
+    res.setHeader("Content-Type", "application/octet-stream");
+
+    // Track downloads in JSON too (optional)
+    // You could send it after download, but headers + file stream is enough for browser
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+
+    console.log(`User ${userId} downloaded resource ${id}`);
+  } catch (err) {
+    console.error("Download error:", err);
+    res.status(500).json({ error: "Download failed" });
   }
 });
+
 
 
 /**
