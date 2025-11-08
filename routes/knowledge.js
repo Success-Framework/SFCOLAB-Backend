@@ -574,7 +574,7 @@ router.get("/:id/comments", async (req, res) => {
 
 /**
  * @route   POST /api/knowledge/:id/download
- * @desc    Track resource download
+ * @desc    Track unique resource download (increments only once per user)
  * @access  Private
  */
 router.post("/:id/download", authenticateToken, async (req, res) => {
@@ -590,31 +590,45 @@ router.post("/:id/download", authenticateToken, async (req, res) => {
       });
     }
 
-    await Knowledge.findByIdAndUpdate(id, { $inc: { downloads: 1 } });
+    // Check if this user already downloaded it
     const existingDownload = await ResourceDownload.findOne({
       resourceId: id,
       userId,
     });
+
     if (!existingDownload) {
+      // Record new unique download
       await ResourceDownload.create({
         resourceId: id,
         userId,
         downloadedAt: new Date(),
       });
+
+      // Increment Knowledge.downloads count
+      await Knowledge.findByIdAndUpdate(id, { $inc: { downloads: 1 } });
+      resource.downloads += 1;
     }
 
-    const updated = await Knowledge.findById(id).select("downloads");
+    // Get the current total downloads count
+    const totalDownloads = await ResourceDownload.countDocuments({
+      resourceId: id,
+    });
+
     res.json({
-      message: "Download tracked successfully",
-      downloads: updated.downloads,
+      message: existingDownload
+        ? "Download already recorded for this user"
+        : "Download tracked successfully",
+      downloads: totalDownloads,
     });
   } catch (error) {
     console.error("Track download error:", error);
-    res
-      .status(500)
-      .json({ error: "Tracking Failed", message: "Failed to track download" });
+    res.status(500).json({
+      error: "Tracking Failed",
+      message: "Failed to track download",
+    });
   }
 });
+
 
 /**
  * @route   POST /api/knowledge/:id/like
