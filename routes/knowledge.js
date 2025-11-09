@@ -144,10 +144,11 @@ router.post(
       });
 
       const io = req.app.get("io");
-      if (io) io.to(userId.toString()).emit("notification", {
-        title: "Knowledge Post Created",
-        message: `"${title}" has been created successfuly`,
-      });
+      if (io)
+        io.to(userId.toString()).emit("notification", {
+          title: "Knowledge Post Created",
+          message: `"${title}" has been created successfuly`,
+        });
 
       res.status(201).json({
         message: "Knowledge resource added successfully",
@@ -440,7 +441,6 @@ router.get("/:id", optionalAuth, async (req, res) => {
   }
 });
 
-
 /**
  * @route   PUT /api/knowledge/:id
  * @desc    Update knowledge resource (only author can update)
@@ -624,73 +624,49 @@ router.get("/:id/comments", async (req, res) => {
 });
 
 /**
- * @route   POST /api/knowledge/:id/download
- * @desc    Track unique resource download (increments only once per user)
- * @access  Private
+ * @route   GET /api/knowledge/:id/file
+ * @desc    Download the file
+ * @access  Public
  */
-
-
-// POST /api/knowledge/:id/download
-router.post("/:id/download", authenticateToken, async (req, res) => {
+router.get("/:id/file", optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.user;
-
-    // Find the resource
     const resource = await Knowledge.findById(id);
+
     if (!resource) {
-      return res.status(404).json({ error: "Resource not found" });
-    }
-
-    // Record unique download
-    const existingDownload = await ResourceDownload.findOne({
-      resourceId: id,
-      userId,
-    });
-
-    if (!existingDownload) {
-      await ResourceDownload.create({
-        resourceId: id,
-        userId,
-        downloadedAt: new Date(),
+      return res.status(404).json({
+        error: "Resource Not Found",
+        message: "Knowledge resource not found",
       });
-
-      await Knowledge.findByIdAndUpdate(id, { $inc: { downloads: 1 } });
-      resource.downloads += 1;
     }
 
-    // Get the current total downloads count
-    const totalDownloads = await ResourceDownload.countDocuments({
-      resourceId: id,
+    if (!resource.image || !resource.image.buffer) {
+      return res.status(404).json({
+        error: "File Not Found",
+        message: "No file attached to this resource",
+      });
+    }
+
+    const fileData = resource.image.buffer;
+    const mimeType = resource.image.contentType || "application/octet-stream";
+    const filename = `${resource.title || "resource"}.${
+      mimeType.split("/")[1]
+    }`;
+
+    res.set({
+      "Content-Type": mimeType,
+      "Content-Disposition": `attachment; filename="${filename}"`,
     });
 
-    // Send the actual file
-    // Make sure `resource.fileUrl` stores only the filename, e.g., 'example.pdf'
-    const filePath = path.join(__dirname, "..", "uploads", resource.fileUrl);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: "File not found on server" });
-    }
-
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${resource.fileUrl}"`
-    );
-    res.setHeader("Content-Type", "application/octet-stream");
-
-    // Track downloads in JSON too (optional)
-    // You could send it after download, but headers + file stream is enough for browser
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(res);
-
-    console.log(`User ${userId} downloaded resource ${id}`);
-  } catch (err) {
-    console.error("Download error:", err);
-    res.status(500).json({ error: "Download failed" });
+    return res.send(fileData);
+  } catch (error) {
+    console.error("File download error:", error);
+    res.status(500).json({
+      error: "Download Failed",
+      message: "Failed to download file",
+    });
   }
 });
-
-
 
 /**
  * @route   POST /api/knowledge/:id/like
