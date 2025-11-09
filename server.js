@@ -29,33 +29,18 @@ const allowedOrigins = [
 ];
 
 const corsOptionsDelegate = (req, callback) => {
-  let requestOrigin = req.header("Origin");
+  const requestOrigin = req.header("Origin");
 
-  // If no Origin header, fall back to Referer for safety
-  if (!requestOrigin) {
-    const refererHeader = req.header("Referer") || req.header("Referrer");
-    if (refererHeader) {
-      try {
-        const refererUrl = new URL(refererHeader);
-        requestOrigin = `${refererUrl.protocol}//${refererUrl.host}`;
-      } catch (_) {
-        requestOrigin = null;
-      }
-    }
+  if (allowedOrigins.includes(requestOrigin)) {
+    callback(null, {
+      origin: true,
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    });
+  } else {
+    callback(new Error("Not allowed by CORS"));
   }
-
-  const isAllowed = requestOrigin && allowedOrigins.includes(requestOrigin);
-  const isLocalhost = requestOrigin && requestOrigin.includes("localhost:5173");
-
-  const corsOptions = {
-    origin: isAllowed || isLocalhost ? requestOrigin || true : false,
-    credentials: true,
-    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-    optionsSuccessStatus: 204,
-  };
-
-  callback(null, corsOptions);
 };
 
 app.use(cors(corsOptionsDelegate));
