@@ -1,6 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 const { authenticateToken, optionalAuth } = require("../middleware/auth");
 const { knowledgeValidation } = require("../middleware/validation");
 const {
@@ -379,13 +380,13 @@ router.get("/user/resources", authenticateToken, async (req, res) => {
 
 /**
  * @route   GET /api/knowledge/:id
- * @desc    Get knowledge resource by ID with comments
+ * @desc    Get knowledge resource by ID with comments and dynamic view tracking
  * @access  Public
  */
 router.get("/:id", optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.user || {};
+    const userId = req.user ? req.user.userId : null;
 
     const resource = await Knowledge.findById(id);
     if (!resource) {
@@ -395,22 +396,31 @@ router.get("/:id", optionalAuth, async (req, res) => {
       });
     }
 
-    // Increment view count and track view if authenticated and not author
-    if (userId && userId !== resource.author.id.toString()) {
-      await Knowledge.findByIdAndUpdate(id, { $inc: { views: 1 } });
+    // Track unique views
+    if (userId && userId.toString() !== resource.author.id.toString()) {
       const existingView = await ResourceView.findOne({
         resourceId: id,
         userId,
       });
+
       if (!existingView) {
+        // Record new view
         await ResourceView.create({
           resourceId: id,
           userId,
           viewedAt: new Date(),
         });
+
+        // Increment view count in Knowledge
+        await Knowledge.findByIdAndUpdate(id, { $inc: { views: 1 } });
+        resource.views += 1; // reflect update in returned response
       }
     }
 
+    //  Get total number of views (even if user isn't logged in)
+    const totalViews = await ResourceView.countDocuments({ resourceId: id });
+
+    //  Fetch comments
     const comments = await KnowledgeComment.find({ resourceId: id }).sort({
       createdAt: -1,
     });
@@ -418,6 +428,7 @@ router.get("/:id", optionalAuth, async (req, res) => {
     res.json({
       resource: {
         ...resource.toObject(),
+        views: totalViews, // ensure latest view count
         comments,
       },
     });
@@ -429,6 +440,7 @@ router.get("/:id", optionalAuth, async (req, res) => {
     });
   }
 });
+
 
 /**
  * @route   PUT /api/knowledge/:id
@@ -613,50 +625,48 @@ router.get("/:id/comments", async (req, res) => {
 });
 
 /**
- * @route   GET /api/knowledge/:id/file
- * @desc    Download the file
- * @access  Public
+ * @route   POST /api/knowledge/:id/download
+ * @desc    Track unique resource download (increments only once per user)
+ * @access  Private
  */
-router.get("/:id/file", optionalAuth, async (req, res) => {
+router.post("/:id/download", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
+    const { userId } = req.user;
+
     const resource = await Knowledge.findById(id);
 
     if (!resource) {
-      return res.status(404).json({
-        error: "Resource Not Found",
-        message: "Knowledge resource not found",
-      });
+      return res.status(404).json({ error: "Resource not found" });
     }
 
-    // Assuming you stored your file in `image` field as a Buffer (like your POST)
-    if (!resource.image || !resource.image.buffer) {
-      return res.status(404).json({
-        error: "File Not Found",
-        message: "No file attached to this resource",
-      });
-    }
-
-    const fileData = resource.image.buffer;
-    const mimeType = resource.image.contentType || "application/octet-stream";
-    const filename = `${resource.title || "resource"}.${
-      mimeType.split("/")[1]
-    }`;
-
-    res.set({
-      "Content-Type": mimeType,
-      "Content-Disposition": `attachment; filename="${filename}"`,
+    await Knowledge.findByIdAndUpdate(id, { $inc: { downloads: 1 } });
+    const existingDownload = await ResourceDownload.findOne({
+      resourceId: id,
+      userId,
     });
+    if (!existingDownload) {
+      await ResourceDownload.create({
+        resourceId: id,
+        userId,
+        downloadedAt: new Date(),
+      });
+    }
 
-    return res.send(fileData);
+    const updated = await Knowledge.findById(id).select("downloads");
+    res.json({
+      message: "Download tracked successfully",
+      downloads: updated.downloads,
+    });
   } catch (error) {
-    console.error("File download error:", error);
-    res.status(500).json({
-      error: "Download Failed",
-      message: "Failed to download file",
-    });
+    console.error("Track download error:", error);
+    res
+      .status(500)
+      .json({ error: "Tracking Failed", message: "Failed to track download" });
   }
 });
+
+
 
 /**
  * @route   POST /api/knowledge/:id/like
