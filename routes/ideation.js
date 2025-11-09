@@ -1,7 +1,13 @@
 const express = require("express");
 const { authenticateToken, optionalAuth } = require("../middleware/auth");
 const { ideationValidation } = require("../middleware/validation");
-const { Idea, IdeaComment, Suggestion, User } = require("../models/schemas");
+const {
+  Idea,
+  IdeaComment,
+  Suggestion,
+  User,
+  Notification,
+} = require("../models/schemas");
 
 const router = express.Router();
 
@@ -102,6 +108,21 @@ router.post(
         likes: 0,
         views: 0,
       });
+
+      await Notification.create({
+        userId,
+        type: "sysetm",
+        title: "Idea Created Successfully",
+        message: `Idea "${title}" has been created successfully`,
+        data: { ideaId: ideaDoc._id },
+      });
+
+      const io = req.app.get("io");
+      if (io)
+        io.to(userId.toString()).emit("notification", {
+          title: "Idea Creatd Successfully",
+          message: `Idea "${title}" has been created successfully`,
+        });
 
       res
         .status(201)
