@@ -19,6 +19,8 @@ const profileRoutes = require("./routes/profile");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.set("trust proxy", 1);
+
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
@@ -181,7 +183,7 @@ app.use((err, req, res, next) => {
       });
 
       socket.on("disconnect", () => {
-        console.log(`🔴 User disconnected: ${socket.userId}`);
+        console.log(`🔴 User disconnected: ${socket.user.userId}`);
       });
     });
 
