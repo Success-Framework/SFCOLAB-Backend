@@ -165,11 +165,11 @@ app.use((err, req, res, next) => {
 
     // Socket.IO setup
     io.on("connection", (socket) => {
-      console.log(`🟢 User connected: ${socket.user.id}`);
+      console.log(`🟢 User connected: ${socket.user.userId}`);
 
       // Join user-specific room
-      socket.join(socket.user.id);
-      console.log(`User ${socket.user.id} joined their room`);
+      socket.join(socket.user.userId);
+      console.log(`User ${socket.user.userId} joined their room`);
 
       // Example: sending notification to specific user
       socket.on("sendNotification", (data) => {
@@ -181,7 +181,7 @@ app.use((err, req, res, next) => {
       });
 
       socket.on("disconnect", () => {
-        console.log(`🔴 User disconnected: ${socket.id}`);
+        console.log(`🔴 User disconnected: ${socket.userId}`);
       });
     });
 
