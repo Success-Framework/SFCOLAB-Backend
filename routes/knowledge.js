@@ -441,7 +441,6 @@ router.get("/:id", optionalAuth, async (req, res) => {
   }
 });
 
-
 /**
  * @route   PUT /api/knowledge/:id
  * @desc    Update knowledge resource (only author can update)
@@ -625,48 +624,49 @@ router.get("/:id/comments", async (req, res) => {
 });
 
 /**
- * @route   POST /api/knowledge/:id/download
- * @desc    Track unique resource download (increments only once per user)
- * @access  Private
+ * @route   GET /api/knowledge/:id/file
+ * @desc    Download the file
+ * @access  Public
  */
-router.post("/:id/download", authenticateToken, async (req, res) => {
+router.get("/:id/file", optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.user;
-
     const resource = await Knowledge.findById(id);
 
     if (!resource) {
-      return res.status(404).json({ error: "Resource not found" });
-    }
-
-    await Knowledge.findByIdAndUpdate(id, { $inc: { downloads: 1 } });
-    const existingDownload = await ResourceDownload.findOne({
-      resourceId: id,
-      userId,
-    });
-    if (!existingDownload) {
-      await ResourceDownload.create({
-        resourceId: id,
-        userId,
-        downloadedAt: new Date(),
+      return res.status(404).json({
+        error: "Resource Not Found",
+        message: "Knowledge resource not found",
       });
     }
 
-    const updated = await Knowledge.findById(id).select("downloads");
-    res.json({
-      message: "Download tracked successfully",
-      downloads: updated.downloads,
+    if (!resource.image || !resource.image.buffer) {
+      return res.status(404).json({
+        error: "File Not Found",
+        message: "No file attached to this resource",
+      });
+    }
+
+    const fileData = resource.image.buffer;
+    const mimeType = resource.image.contentType || "application/octet-stream";
+    const filename = `${resource.title || "resource"}.${
+      mimeType.split("/")[1]
+    }`;
+
+    res.set({
+      "Content-Type": mimeType,
+      "Content-Disposition": `attachment; filename="${filename}"`,
     });
+
+    return res.send(fileData);
   } catch (error) {
-    console.error("Track download error:", error);
-    res
-      .status(500)
-      .json({ error: "Tracking Failed", message: "Failed to track download" });
+    console.error("File download error:", error);
+    res.status(500).json({
+      error: "Download Failed",
+      message: "Failed to download file",
+    });
   }
 });
-
-
 
 /**
  * @route   POST /api/knowledge/:id/like
