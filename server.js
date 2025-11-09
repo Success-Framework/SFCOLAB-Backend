@@ -31,16 +31,23 @@ const allowedOrigins = [
 const corsOptionsDelegate = (req, callback) => {
   const requestOrigin = req.header("Origin");
 
-  if (allowedOrigins.includes(requestOrigin)) {
-    callback(null, {
-      origin: true,
-      credentials: true,
-      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-    });
-  } else {
-    callback(new Error("Not allowed by CORS"));
+  // Log blocked origins
+  if (!allowedOrigins.includes(requestOrigin)) {
+    console.warn("Blocked CORS request from:", requestOrigin);
   }
+
+  // Set CORS options safely
+  const isAllowed = allowedOrigins.includes(requestOrigin);
+
+  const corsOptions = {
+    origin: isAllowed,
+    credentials: isAllowed, 
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    optionsSuccessStatus: 204,
+  };
+
+  callback(null, corsOptions);
 };
 
 app.use(cors(corsOptionsDelegate));
