@@ -8,6 +8,7 @@ const {
   StartupMember,
   JoinRequest,
   User,
+  Notification,
 } = require("../models/schemas");
 
 const router = express.Router();
@@ -111,6 +112,23 @@ router.post(
         joinedAt: new Date(),
         isActive: true,
       });
+
+      // Notification for persistency
+      await Notification.create({
+        userId,
+        type: "system",
+        title: "Startup Registered",
+        message: `You have successfully registered the startup "${name}"`,
+        data: { startupId: startupDoc._id },
+      });
+
+      const io = req.app.get("io");
+
+      if (io)
+        io.to(userId.toString()).emit("notification", {
+          title: "Startup Registered",
+          message: `Startup "${name}" created successfully`,
+        });
 
       res.status(201).json({
         message: "Startup registered successfully",
@@ -406,6 +424,23 @@ router.post("/:id/join-request", authenticateToken, async (req, res) => {
 
     // TODO: Send notification to startup creator
 
+    // Notification for persistency
+    await Notification.create({
+      userId: startup.creator.id,
+      type: "startup",
+      title: "New Join Request",
+      message: `${firstName} ${lastName} requested to join your startup "${startup.name}"`,
+      data: { startupId: id, requestId: joinRequest._id },
+    });
+
+    // Socket emit to startup creator
+    const io = req.app.get("io");
+    if (io)
+      io.to(startup.creator.id.toString()).emit("notification", {
+        title: "New Join Request",
+        message: `${firstName} ${lastName} requested to join your startup "${startup.name}"`,
+        data: { startupId: id, requestId: joinRequest._id },
+      });
     res
       .status(201)
       .json({ message: "Join request submitted successfully", joinRequest });
@@ -607,7 +642,7 @@ router.post("/:id/bookmark", authenticateToken, async (req, res) => {
         startup.description?.substring(0, 120) +
         (startup.description?.length > 120 ? "..." : "");
 
-        // stored the startup name as title
+      // stored the startup name as title
       const title = startup.name;
 
       const newBookmark = {

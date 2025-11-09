@@ -11,6 +11,7 @@ const {
   ResourceDownload,
   ResourceLike,
   User,
+  Notification,
 } = require("../models/schemas");
 
 const router = express.Router();
@@ -28,7 +29,11 @@ const upload = multer({
     if (mimetype && extname) {
       return cb(null, true);
     }
-    cb(new Error("Only PDF, DOC, DOCX, JPG, JPEG, gif, and PNG files are allowed"));
+    cb(
+      new Error(
+        "Only PDF, DOC, DOCX, JPG, JPEG, gif, and PNG files are allowed"
+      )
+    );
   },
 });
 
@@ -100,7 +105,7 @@ router.get("/", optionalAuth, async (req, res) => {
 router.post(
   "/",
   authenticateToken,
-  upload.single("fileUrl"), 
+  upload.single("fileUrl"),
   knowledgeValidation.addResource,
   async (req, res) => {
     try {
@@ -120,14 +125,28 @@ router.post(
         titleDescription,
         contentPreview,
         category,
-        fileUrl: null, 
+        fileUrl: null,
         tags: Array.isArray(tags) ? tags : [],
         author: { id: userId, firstName, lastName },
         status: "active",
         views: 0,
         downloads: 0,
         likes: 0,
-        image: imageBuffer, 
+        image: imageBuffer,
+      });
+
+      await Notification.create({
+        userId,
+        type: "system",
+        title: "Knowledge Post Created",
+        message: `You have successfully created a knowledge post "${title}"`,
+        data: { knowledgeId: resourceDoc._id },
+      });
+
+      const io = req.app.get("io");
+      if (io) io.to(userId.toString()).emit("notification", {
+        title: "Knowledge Post Created",
+        message: `"${title}" has been created successfuly`,
       });
 
       res.status(201).json({
@@ -290,7 +309,7 @@ router.post("/upload", authenticateToken, (req, res) => {
       });
     }
 
-    const maxSize = 50 * 1024 * 1024; 
+    const maxSize = 50 * 1024 * 1024;
     if (fileSize > maxSize) {
       return res.status(400).json({
         error: "File Too Large",
