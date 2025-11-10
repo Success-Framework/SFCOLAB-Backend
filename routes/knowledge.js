@@ -651,7 +651,7 @@ router.get("/:id/file", optionalAuth, async (req, res) => {
       });
     }
 
-    // ✅ Convert MongoDB's Buffer object into raw binary
+    // Convert MongoDB's Buffer object into raw binary
     const fileData = Buffer.from(resource.image.buffer.data);
 
     const mimeType = resource.image.contentType || "application/octet-stream";
