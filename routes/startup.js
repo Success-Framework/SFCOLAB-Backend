@@ -13,6 +13,14 @@ const {
 
 const router = express.Router();
 
+//converts blob to string
+const toBase64Image = (fileObj) => {
+  if (!fileObj || !fileObj.data) return null;
+  return `data:${fileObj.contentType};base64,${fileObj.data.toString(
+    "base64"
+  )}`;
+};
+
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
@@ -177,14 +185,22 @@ router.get("/", optionalAuth, async (req, res) => {
 
     const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
     const skip = (parseInt(page) - 1) * parseInt(limit);
+
     const [items, totalStartups] = await Promise.all([
       Startup.find(query).sort(sort).skip(skip).limit(parseInt(limit)),
       Startup.countDocuments(query),
     ]);
+
+    const startupsWithImages = items.map((startup) => ({
+      ...startup.toObject(),
+      logo: toBase64Image(startup.logo),
+      banner: toBase64Image(startup.banner),
+    }));
+
     const totalPages = Math.ceil(totalStartups / parseInt(limit));
 
     res.json({
-      startups: items,
+      startups: startupsWithImages,
       pagination: {
         currentPage: parseInt(page),
         totalPages,
@@ -250,9 +266,8 @@ router.get("/:id", optionalAuth, async (req, res) => {
       const isMember = startup.members.find(
         (m) => m.userId?.toString() === userId
       );
-      if (!isMember) {
+      if (!isMember)
         await Startup.findByIdAndUpdate(id, { $inc: { views: 1 } });
-      }
     }
 
     let joinRequestsData = [];
@@ -261,7 +276,12 @@ router.get("/:id", optionalAuth, async (req, res) => {
     }
 
     res.json({
-      startup: { ...startup.toObject(), joinRequests: joinRequestsData },
+      startup: {
+        ...startup.toObject(),
+        logo: toBase64Image(startup.logo),
+        banner: toBase64Image(startup.banner),
+        joinRequests: joinRequestsData,
+      },
     });
   } catch (error) {
     console.error("Get startup error:", error);
