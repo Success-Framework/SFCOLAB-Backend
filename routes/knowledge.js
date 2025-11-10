@@ -119,6 +119,7 @@ router.post(
       } = req.body;
 
       const imageBuffer = req.file ? req.file.buffer : null;
+      const imageContentType = req.file ? req.file.mimetype : null;
 
       const resourceDoc = await Knowledge.create({
         title,
@@ -132,7 +133,10 @@ router.post(
         views: 0,
         downloads: 0,
         likes: 0,
-        image: imageBuffer,
+        image: {
+          buffer: imageBuffer,
+          contentType: imageContentType,
+        },
       });
 
       await Notification.create({
@@ -640,27 +644,20 @@ router.get("/:id/file", optionalAuth, async (req, res) => {
       });
     }
 
-    if (
-      !resource.image ||
-      !resource.image.buffer ||
-      !resource.image.buffer.data
-    ) {
+    if (!resource.image) {
       return res.status(404).json({
         error: "File Not Found",
         message: "No file attached to this resource",
       });
     }
 
-    // Convert MongoDB's Buffer object into raw binary
-    const fileData = Buffer.from(resource.image.buffer.data);
-
+    const fileData = Buffer.from(resource.image); // just the buffer
     const mimeType = resource.image.contentType || "application/octet-stream";
-    const filename = `${resource.title || "resource"}.${
-      mimeType.split("/")[1]
-    }`;
-
+    const extension = mimeType.split("/")[1]; // e.g., pdf, png, jpeg
+    const filename = `${resource.title || "resource"}.${extension}`;
+    
     res.set({
-      "Content-Type": mimeType,
+      "Content-Type": "application/octet-stream",
       "Content-Disposition": `attachment; filename="${filename}"`,
     });
 
