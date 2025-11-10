@@ -16,9 +16,18 @@ const router = express.Router();
 //converts blob to string
 const toBase64Image = (fileObj) => {
   if (!fileObj || !fileObj.data) return null;
-  return `data:${fileObj.contentType};base64,${fileObj.data.toString(
-    "base64"
-  )}`;
+
+  // If it's a nested buffer object from MongoDB
+  let buffer;
+  if (Buffer.isBuffer(fileObj.data)) {
+    buffer = fileObj.data;
+  } else if (fileObj.data.data) {
+    buffer = Buffer.from(fileObj.data.data);
+  } else {
+    return null;
+  }
+
+  return `data:${fileObj.contentType};base64,${buffer.toString("base64")}`;
 };
 
 const storage = multer.memoryStorage();
