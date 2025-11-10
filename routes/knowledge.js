@@ -644,20 +644,20 @@ router.get("/:id/file", optionalAuth, async (req, res) => {
       });
     }
 
-    if (!resource.image) {
+    if (!resource.image || !resource.image.buffer) {
       return res.status(404).json({
         error: "File Not Found",
         message: "No file attached to this resource",
       });
     }
 
-    const fileData = Buffer.from(resource.image); // just the buffer
+    const fileData = resource.image.buffer; 
     const mimeType = resource.image.contentType || "application/octet-stream";
-    const extension = mimeType.split("/")[1]; // e.g., pdf, png, jpeg
+    const extension = mimeType.split("/")[1] || "bin"; 
     const filename = `${resource.title || "resource"}.${extension}`;
-    
+
     res.set({
-      "Content-Type": "application/octet-stream",
+      "Content-Type": mimeType,
       "Content-Disposition": `attachment; filename="${filename}"`,
     });
 
