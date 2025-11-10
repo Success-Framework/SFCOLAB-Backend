@@ -104,7 +104,10 @@ const knowledgeSchema = new mongoose.Schema(
     views: { type: Number, default: 0 },
     downloads: { type: Number, default: 0 },
     likes: { type: Number, default: 0 },
-    image: Buffer,
+    image: {
+      buffer: Buffer,
+      contentType: String, 
+    },
   },
   { timestamps: true }
 );
