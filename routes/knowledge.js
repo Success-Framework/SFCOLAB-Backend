@@ -640,14 +640,20 @@ router.get("/:id/file", optionalAuth, async (req, res) => {
       });
     }
 
-    if (!resource.image || !resource.image.buffer) {
+    if (
+      !resource.image ||
+      !resource.image.buffer ||
+      !resource.image.buffer.data
+    ) {
       return res.status(404).json({
         error: "File Not Found",
         message: "No file attached to this resource",
       });
     }
 
-    const fileData = resource.image.buffer;
+    // ✅ Convert MongoDB's Buffer object into raw binary
+    const fileData = Buffer.from(resource.image.buffer.data);
+
     const mimeType = resource.image.contentType || "application/octet-stream";
     const filename = `${resource.title || "resource"}.${
       mimeType.split("/")[1]
