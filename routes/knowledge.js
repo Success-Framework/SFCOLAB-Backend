@@ -629,14 +629,15 @@ router.get("/:id/comments", async (req, res) => {
 
 /**
  * @route   GET /api/knowledge/:id/file
- * @desc    Download the file
- * @access  Public
+ * @desc    Download file and track unique download (only for logged-in users)
+ * @access  Public (tracking applies only if authenticated)
  */
 router.get("/:id/file", optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const resource = await Knowledge.findById(id);
+    const userId = req.user ? req.user.userId : null; 
 
+    const resource = await Knowledge.findById(id);
     if (!resource) {
       return res.status(404).json({
         error: "Resource Not Found",
@@ -644,6 +645,27 @@ router.get("/:id/file", optionalAuth, async (req, res) => {
       });
     }
 
+    // Track download only if user is authenticated
+    if (userId) {
+      const existingDownload = await ResourceDownload.findOne({
+        resourceId: id,
+        userId,
+      });
+
+      if (!existingDownload) {
+        // Create new record for this unique user download
+        await ResourceDownload.create({
+          resourceId: id,
+          userId,
+          downloadedAt: new Date(),
+        });
+
+        // Increment Knowledge.downloads count
+        await Knowledge.findByIdAndUpdate(id, { $inc: { downloads: 1 } });
+      }
+    }
+
+    // Serve the file
     if (!resource.image || !resource.image.buffer) {
       return res.status(404).json({
         error: "File Not Found",
@@ -651,9 +673,9 @@ router.get("/:id/file", optionalAuth, async (req, res) => {
       });
     }
 
-    const fileData = resource.image.buffer; 
+    const fileData = resource.image.buffer;
     const mimeType = resource.image.contentType || "application/octet-stream";
-    const extension = mimeType.split("/")[1] || "bin"; 
+    const extension = mimeType.split("/")[1] || "bin";
     const filename = `${resource.title || "resource"}.${extension}`;
 
     res.set({
