@@ -173,15 +173,6 @@ app.use((err, req, res, next) => {
       socket.join(socket.user.userId);
       console.log(`User ${socket.user.userId} joined their room`);
 
-      // Example: sending notification to specific user
-      socket.on("sendNotification", (data) => {
-        const { receiverId, message } = data;
-        io.to(receiverId).emit("receiveNotification", {
-          message,
-          timestamp: new Date(),
-        });
-      });
-
       socket.on("disconnect", () => {
         console.log(`🔴 User disconnected: ${socket.user.userId}`);
       });
