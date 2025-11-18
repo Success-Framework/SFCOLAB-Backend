@@ -515,6 +515,58 @@ const connectionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Message schema
+const messageSchema = new mongoose.Schema({
+  senderId: {
+    type: String,
+    required: true,
+    index: true
+  },
+  recipientId: {
+    type: String,
+    required: true,
+    index: true
+  },
+  content: {
+    type: String,
+    default: ""
+  },
+  file: {
+    name: String,
+    type: String,
+    size: Number,
+    data: Buffer,
+    isVoiceNote: {
+      type: Boolean,
+      default: false
+    },
+    duration: Number
+  },
+  messageType: {
+    type: String,
+    enum: ['text', 'file', 'voice_note'],
+    default: 'text'
+  },
+  status: {
+    type: String,
+    enum: ['sent', 'delivered', 'read'],
+    default: 'sent'
+  },
+  isRead: {
+    type: Boolean,
+    default: false
+  },
+  timestamp: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  timestamps: true
+});
+
+messageSchema.index({ senderId: 1, recipientId: 1 });
+messageSchema.index({ recipientId: 1, createdAt: -1 });
+
 /* ========================== EXPORT MODELS ========================== */
 module.exports = {
   User: mongoose.model("User", userSchema),
@@ -537,4 +589,5 @@ module.exports = {
   PostLike: mongoose.model("PostLike", postLikeSchema),
   PostComment: mongoose.model("PostComment", postCommentSchema),
   Connection: mongoose.model("Connection", connectionSchema),
+  Message: mongoose.model("Message", messageSchema),
 };

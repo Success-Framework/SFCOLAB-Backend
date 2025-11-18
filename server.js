@@ -15,6 +15,7 @@ const knowledgeRoutes = require("./routes/knowledge");
 const settingsRoutes = require("./routes/settings");
 const { router: notificationRoutes } = require("./routes/notifications");
 const profileRoutes = require("./routes/profile");
+const { router: messageRoutes } = require("./routes/message");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,7 +44,7 @@ const corsOptionsDelegate = (req, callback) => {
 
   const corsOptions = {
     origin: isAllowed,
-    credentials: isAllowed, 
+    credentials: isAllowed,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     optionsSuccessStatus: 204,
@@ -96,6 +97,7 @@ app.use("/api/knowledge", knowledgeRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/api/message", messageRoutes);
 
 // 404 handler
 app.use("*", (req, res) => {
@@ -165,7 +167,7 @@ app.use((err, req, res, next) => {
       }
     });
 
-    // Socket.IO setup
+    // Web socket connection
     io.on("connection", (socket) => {
       console.log(`🟢 User connected: ${socket.user.userId}`);
 
@@ -173,8 +175,131 @@ app.use((err, req, res, next) => {
       socket.join(socket.user.userId);
       console.log(`User ${socket.user.userId} joined their room`);
 
+      // MARK USER ONLINE FOR MESSAGING
+      const { onlineUsers } = require("./routes/message");
+      onlineUsers.set(socket.user.userId, socket.id);
+
+      // Notify others this user is online
+      socket.broadcast.emit("userOnline", socket.user.userId);
+
+      // Send current online users to this client
+      const onlineUserIds = Array.from(onlineUsers.keys());
+      socket.emit("initialOnlineStatus", onlineUserIds);
+
+      // MESSAGING EVENT HANDLERS
+      socket.on("sendMessage", async (data, callback) => {
+        try {
+          const { recipientId, content, file, senderName, tempId } = data;
+          const userId = socket.user.userId;
+
+          if (!recipientId) {
+            return callback?.({
+              status: "error",
+              message: "Recipient ID is required",
+            });
+          }
+
+          const Message = require("./models/schemas");
+          const newMessage = new Message({
+            senderId: userId,
+            recipientId,
+            content: content || "",
+            file: file || null,
+            messageType: file
+              ? file.isVoiceNote
+                ? "voice_note"
+                : "file"
+              : "text",
+            status: "sent",
+            isRead: false,
+          });
+
+          const savedMessage = await newMessage.save();
+
+          const messageResponse = {
+            id: `msg_${savedMessage._id}`,
+            senderId: savedMessage.senderId,
+            recipientId: savedMessage.recipientId,
+            content: savedMessage.content,
+            file: savedMessage.file,
+            timestamp: savedMessage.timestamp,
+            status: savedMessage.status,
+            isRead: savedMessage.isRead,
+          };
+
+          // Send to recipient if online
+          const recipientSocketId = onlineUsers.get(recipientId);
+          if (recipientSocketId) {
+            io.to(recipientSocketId).emit("newMessage", {
+              ...messageResponse,
+              isOwn: false,
+            });
+          }
+
+          // Send success response to sender
+          callback?.({
+            status: "success",
+            message: {
+              ...messageResponse,
+              isOwn: true,
+              id: tempId || `msg_${savedMessage._id}`,
+            },
+          });
+
+          console.log(`💌 Message sent from ${userId} to ${recipientId}`);
+        } catch (error) {
+          console.error("Error sending message:", error);
+          callback?.({ status: "error", message: "Failed to send message" });
+        }
+      });
+
+      // Mark messages as read
+      socket.on("markAsRead", async (messageIds, callback) => {
+        try {
+          const Message = require("./models/schemas");
+          const mongoIds = messageIds.map((id) => id.replace("msg_", ""));
+
+          await Message.updateMany(
+            {
+              _id: { $in: mongoIds },
+              recipientId: socket.user.userId,
+            },
+            {
+              isRead: true,
+              status: "read",
+            }
+          );
+
+          // Notify senders
+          const messages = await Message.find({ _id: { $in: mongoIds } });
+          const senders = [...new Set(messages.map((msg) => msg.senderId))];
+
+          senders.forEach((senderId) => {
+            const senderSocketId = onlineUsers.get(senderId);
+            if (senderSocketId) {
+              Message.countDocuments({
+                senderId: senderId,
+                recipientId: socket.user.userId,
+                isRead: false,
+              }).then((count) => {
+                io.to(senderSocketId).emit("unreadCountUpdate", { count });
+              });
+            }
+          });
+
+          callback?.({ status: "success" });
+        } catch (error) {
+          console.error("Error marking messages as read:", error);
+          callback?.({ status: "error" });
+        }
+      });
+
+      // Handle disconnection
       socket.on("disconnect", () => {
         console.log(`🔴 User disconnected: ${socket.user.userId}`);
+
+        onlineUsers.delete(socket.user.userId);
+        socket.broadcast.emit("userOffline", socket.user.userId); // Broadcasts offline status to other users
       });
     });
 
