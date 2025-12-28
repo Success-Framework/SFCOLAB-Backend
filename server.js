@@ -6,6 +6,7 @@ const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 const http = require("http");
 const { Server } = require("socket.io");
+const passport = require("passport");
 
 const { connectMongo } = require("./db/mongoose");
 const authRoutes = require("./routes/auth");
@@ -62,6 +63,8 @@ app.use(
     crossOriginResourcePolicy: false,
   })
 );
+
+app.use(passport.initialize());
 
 // Rate limiting
 const limiter = rateLimit({
