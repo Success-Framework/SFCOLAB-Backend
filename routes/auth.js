@@ -1,5 +1,6 @@
 const express = require('express');
 const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const { authenticateToken, authenticateRefreshToken } = require('../middleware/auth');
 const { authValidation } = require('../middleware/validation');
 const { generateTokens } = require('../utils/jwt');
@@ -7,6 +8,58 @@ const { hashPassword, comparePassword } = require('../utils/password');
 const { User, RefreshToken } = require('../models/schemas');
 
 const router = express.Router();
+
+const SERVER_URL = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
+const CLIENT_REDIRECT_URL = process.env.CLIENT_REDIRECT_URL || 'http://localhost:5173';
+
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: `${SERVER_URL}/api/auth/google/callback`,
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      try {
+        const email = Array.isArray(profile.emails) && profile.emails.length > 0 ? profile.emails[0].value : null;
+        const firstName = profile.name?.givenName || profile.displayName || 'User';
+        const lastName = profile.name?.familyName || '';
+        const picture = Array.isArray(profile.photos) && profile.photos.length > 0 ? profile.photos[0].value : null;
+        const googleId = profile.id;
+
+        if (!email) {
+          return done(new Error('Email not provided by Google'), null);
+        }
+
+        let userDoc = await User.findOne({ $or: [{ googleId }, { email }] });
+        if (userDoc) {
+          userDoc.googleId = googleId;
+          userDoc.isEmailVerified = true;
+          userDoc.lastLogin = new Date();
+          const newProfile = userDoc.profile?.toObject ? userDoc.profile.toObject() : userDoc.profile || {};
+          if (picture) newProfile.picture = picture;
+          userDoc.profile = newProfile;
+          await userDoc.save();
+        } else {
+          userDoc = new User({
+            firstName,
+            lastName,
+            email,
+            googleId,
+            isEmailVerified: true,
+            profile: { picture, bio: null, company: null, socialLinks: {} },
+            lastLogin: new Date(),
+          });
+          await userDoc.save();
+        }
+
+        return done(null, userDoc);
+      } catch (err) {
+        return done(err, null);
+      }
+    }
+  )
+);
 
 /**
  * @route   POST /api/auth/signup
@@ -337,12 +390,28 @@ router.get('/google', passport.authenticate('google', {
  */
 router.get('/google/callback', 
   passport.authenticate('google', { session: false }),
-  (req, res) => {
+  async (req, res) => {
     try {
-      // This will be implemented when we add Google OAuth strategy
-      res.json({
-        message: 'Google OAuth callback - Implementation pending'
+      const userDoc = req.user;
+      if (!userDoc) {
+        return res.status(401).json({ error: 'Unauthorized', message: 'Google authentication failed' });
+      }
+
+      const tokens = generateTokens({
+        userId: userDoc._id.toString(),
+        email: userDoc.email,
+        firstName: userDoc.firstName,
+        lastName: userDoc.lastName
       });
+
+      await RefreshToken.findOneAndUpdate(
+        { userId: userDoc._id },
+        { token: tokens.refreshToken, createdAt: new Date() },
+        { upsert: true, new: true }
+      );
+
+      const redirectUrl = `${CLIENT_REDIRECT_URL}/oauth/google/callback?accessToken=${encodeURIComponent(tokens.accessToken)}&refreshToken=${encodeURIComponent(tokens.refreshToken)}`;
+      return res.redirect(302, redirectUrl);
     } catch (error) {
       console.error('Google OAuth callback error:', error);
       res.status(500).json({
