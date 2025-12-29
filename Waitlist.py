@@ -6,7 +6,16 @@ class Waitlist(db.Model):
     """
     SF Waitlist System
     
-    Rank Score = (Referrals × 2) + Contribution Points + Engagement Points + Early Commitment Bonus
+    Rank Score = (Referrals × 2) + Contribution Points + Engagement Points + Early Commitment Bonus + Code Development Points
+    
+    Access Waves:
+    - Jan 10: 1,000 users
+    - Jan 17: 2,500 users
+    - Jan 24: 5,000 users
+    - Jan 31: 7,500 users
+    - Feb 7: 10,000 users
+    
+    Everyone gets free access until February 7th, 2025
     """
     __tablename__ = 'waitlist'
     
@@ -21,12 +30,13 @@ class Waitlist(db.Model):
     contribution_points = db.Column(db.Integer, default=0)  # Small: 5, Medium: 10, High: 20
     engagement_points = db.Column(db.Integer, default=0)  # Small recurring bonuses
     early_commitment_bonus = db.Column(db.Integer, default=0)  # One-time baseline boost
+    code_development_points = db.Column(db.Integer, default=0)  # Manual points for code help
     
     # Calculated total score
     total_rank_score = db.Column(db.Integer, default=0)
     
     # Status & Badges
-    status = db.Column(db.String(50), default="waitlist")  # waitlist, mvp, v1, active
+    status = db.Column(db.String(50), default="waitlist")  # waitlist, wave1, wave2, wave3, wave4, wave5, active
     badges = db.Column(db.String(500), default="")  # Comma-separated badges
     
     # Access & Rewards
@@ -43,11 +53,37 @@ class Waitlist(db.Model):
     snapshot_rank = db.Column(db.Integer, nullable=True)  # Rank at snapshot time
     snapshot_date = db.Column(db.DateTime, nullable=True)
     
+    # Access wave dates
+    ACCESS_WAVES = {
+        "wave1": {"date": datetime(2025, 1, 10), "target": 1000},
+        "wave2": {"date": datetime(2025, 1, 17), "target": 2500},
+        "wave3": {"date": datetime(2025, 1, 24), "target": 5000},
+        "wave4": {"date": datetime(2025, 1, 31), "target": 7500},
+        "wave5": {"date": datetime(2025, 2, 7), "target": 10000},
+    }
+    
+    FREE_ACCESS_END_DATE = datetime(2025, 2, 7)
+    
     def __init__(self, email, name=None, referred_by=None):
         self.email = email
         self.name = name
         self.referred_by = referred_by
         self.referral_code = self.generate_referral_code()
+        
+        # Initialize all numeric fields to 0 BEFORE calculating
+        self.referral_count = 0
+        self.contribution_points = 0
+        self.engagement_points = 0
+        self.early_commitment_bonus = 0
+        self.code_development_points = 0
+        self.total_rank_score = 0
+        self.free_access_months = 0
+        self.discount_percentage = 0
+        self.voting_weight = 1
+        self.is_verified = False
+        self.is_spam = False
+        
+        # Now calculate early bonus (this calls update_total_score)
         self.calculate_early_bonus()
     
     @staticmethod
@@ -83,13 +119,14 @@ class Waitlist(db.Model):
     def update_total_score(self):
         """
         Calculate total rank score
-        Score = (Referrals × 2) + Contribution Points + Engagement Points + Early Commitment Bonus
+        Score = (Referrals × 2) + Contribution Points + Engagement Points + Early Commitment Bonus + Code Development Points
         """
         self.total_rank_score = (
             (self.referral_count * 2) +
             self.contribution_points +
             self.engagement_points +
-            self.early_commitment_bonus
+            self.early_commitment_bonus +
+            self.code_development_points
         )
         return self.total_rank_score
     
@@ -117,6 +154,18 @@ class Waitlist(db.Model):
         self.engagement_points += points
         self.update_total_score()
     
+    def add_code_development_points(self, points, description=""):
+        """
+        Add code development points (manual)
+        For users who help develop SF code
+        """
+        if points <= 0:
+            return False, "Points must be positive"
+        
+        self.code_development_points += points
+        self.update_total_score()
+        return True, f"Added {points} code development points"
+    
     def add_badge(self, badge):
         """Add a badge to user"""
         current = self.badges.split(",") if self.badges else []
@@ -135,6 +184,34 @@ class Waitlist(db.Model):
             Waitlist.is_spam == False
         ).count()
         return higher_scores + 1
+    
+    def has_free_access(self):
+        """Check if user has free access (everyone until Feb 7)"""
+        return datetime.now() < self.FREE_ACCESS_END_DATE
+    
+    def get_access_wave(self):
+        """Determine which access wave user belongs to based on rank"""
+        rank = self.snapshot_rank or self.get_current_rank()
+        
+        if rank <= 1000:
+            return "wave1"
+        elif rank <= 2500:
+            return "wave2"
+        elif rank <= 5000:
+            return "wave3"
+        elif rank <= 7500:
+            return "wave4"
+        elif rank <= 10000:
+            return "wave5"
+        else:
+            return "waitlist"
+    
+    def get_access_date(self):
+        """Get the date when user gets access based on rank"""
+        wave = self.get_access_wave()
+        if wave in self.ACCESS_WAVES:
+            return self.ACCESS_WAVES[wave]["date"]
+        return None
     
     def calculate_rewards(self):
         """
@@ -173,6 +250,9 @@ class Waitlist(db.Model):
             self.discount_percentage = 10
         elif rank <= 2500:
             self.discount_percentage = 5
+        
+        # Set access wave status
+        self.status = self.get_access_wave()
     
     def take_snapshot(self):
         """Lock rank at snapshot time"""
@@ -188,7 +268,8 @@ class Waitlist(db.Model):
             return False, "Email already on waitlist", {
                 "rank": existing.get_current_rank(),
                 "referral_code": existing.referral_code,
-                "total_score": existing.total_rank_score
+                "total_score": existing.total_rank_score,
+                "free_access_until": "February 7, 2025"
             }
         
         new_entry = Waitlist(email=email, name=name, referred_by=referred_by)
@@ -206,7 +287,9 @@ class Waitlist(db.Model):
             "rank": new_entry.get_current_rank(),
             "referral_code": new_entry.referral_code,
             "total_score": new_entry.total_rank_score,
-            "early_bonus": new_entry.early_commitment_bonus
+            "early_bonus": new_entry.early_commitment_bonus,
+            "free_access_until": "February 7, 2025",
+            "access_wave": new_entry.get_access_wave()
         }
     
     @staticmethod
@@ -224,7 +307,9 @@ class Waitlist(db.Model):
                 "total_score": user.total_rank_score,
                 "referrals": user.referral_count,
                 "contributions": user.contribution_points,
-                "badges": user.get_badges_list()
+                "code_development": user.code_development_points,
+                "badges": user.get_badges_list(),
+                "access_wave": user.get_access_wave()
             })
         return result
     
@@ -237,15 +322,19 @@ class Waitlist(db.Model):
         return {
             "total_signups": total,
             "verified_users": verified,
-            "mvp_target": 1000,
-            "v1_target": 10000,
-            "spots_to_mvp": max(0, 1000 - total),
-            "spots_to_v1": max(0, 10000 - total)
+            "access_waves": {
+                "wave1_jan10": {"target": 1000, "spots_remaining": max(0, 1000 - total)},
+                "wave2_jan17": {"target": 2500, "spots_remaining": max(0, 2500 - total)},
+                "wave3_jan24": {"target": 5000, "spots_remaining": max(0, 5000 - total)},
+                "wave4_jan31": {"target": 7500, "spots_remaining": max(0, 7500 - total)},
+                "wave5_feb7": {"target": 10000, "spots_remaining": max(0, 10000 - total)},
+            },
+            "free_access_ends": "February 7, 2025"
         }
     
     @staticmethod
     def take_global_snapshot():
-        """Take snapshot for all users (call before MVP/V1 release)"""
+        """Take snapshot for all users (call before each access wave)"""
         all_users = Waitlist.query.filter_by(is_spam=False).order_by(
             Waitlist.total_rank_score.desc()
         ).all()
