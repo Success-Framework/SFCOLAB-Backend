@@ -3,7 +3,11 @@ const cors = require("cors");
 const helmet = require("helmet");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
-require("dotenv").config();
+const path = require("path");
+
+// Load environment variables from .env file
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+
 const http = require("http");
 const { Server } = require("socket.io");
 const passport = require("passport");
@@ -25,8 +29,10 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
+  "http://localhost:5175",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5174",
+  "http://127.0.0.1:5175",
   "https://bright-bunny-ceef3b.netlify.app",
   "https://sfcollab-phi.vercel.app",
   "https://yourdomain.com",
@@ -36,12 +42,12 @@ const corsOptionsDelegate = (req, callback) => {
   const requestOrigin = req.header("Origin");
 
   // Log blocked origins
-  if (!allowedOrigins.includes(requestOrigin)) {
+  if (requestOrigin && !allowedOrigins.includes(requestOrigin)) {
     console.warn("Blocked CORS request from:", requestOrigin);
   }
 
-  // Set CORS options safely
-  const isAllowed = allowedOrigins.includes(requestOrigin);
+  // Set CORS options safely - allow undefined origin for development
+  const isAllowed = !requestOrigin || allowedOrigins.includes(requestOrigin);
 
   const corsOptions = {
     origin: isAllowed,
@@ -139,9 +145,17 @@ app.use((err, req, res, next) => {
 
 // Connect to MongoDB then start server
 (async () => {
+  const dbAdapter = require('./utils/dbAdapter');
   try {
     const conn = await connectMongo();
-    console.log(`🗄️  MongoDB connected: ${conn.host}`);
+    
+    if (conn.mock) {
+      console.log(`⚠️  Running in mock mode (no MongoDB connection)`);
+      dbAdapter.setMongoConnected(false);
+    } else {
+      console.log(`🗄️  MongoDB connected: ${conn.host}`);
+      dbAdapter.setMongoConnected(true);
+    }
 
     const server = http.createServer(app);
     const io = new Server(server, {
@@ -200,8 +214,71 @@ app.use((err, req, res, next) => {
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
     });
   } catch (err) {
-    console.error("Failed to connect to MongoDB:", err);
-    process.exit(1);
+    const dbAdapter = require('./utils/dbAdapter');
+    console.error('Failed to connect to MongoDB:', err.message);
+    console.log('⚠️  Attempting to start server in mock mode...\n');
+    
+    // Set mock mode
+    dbAdapter.setMongoConnected(false);
+    
+    // Continue to start server anyway for development
+    const server = http.createServer(app);
+    const io = new Server(server, {
+      cors: {
+        origin: allowedOrigins,
+        methods: ["GET", "POST"],
+        credentials: true,
+      },
+    });
+
+    // Socket.IO authentication middleware
+    io.use((socket, next) => {
+      const token = socket.handshake.auth?.token;
+
+      if (!token) {
+        return next(new Error("Unauthorized: Token missing"));
+      }
+
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        socket.user = decoded;
+        next();
+      } catch (err) {
+        next(new Error("Unauthorized: Invalid or expired token"));
+      }
+    });
+
+    // Socket.IO setup
+    io.on("connection", (socket) => {
+      console.log(`🟢 User connected: ${socket.user.userId}`);
+
+      // Join user-specific room
+      socket.join(socket.user.userId);
+      console.log(`User ${socket.user.userId} joined their room`);
+
+      // Example: sending notification to specific user
+      socket.on("sendNotification", (data) => {
+        const { receiverId, message } = data;
+        io.to(receiverId).emit("receiveNotification", {
+          message,
+          timestamp: new Date(),
+        });
+      });
+
+      socket.on("disconnect", () => {
+        console.log(`🔴 User disconnected: ${socket.user.userId}`);
+      });
+    });
+
+    // Make `io` accessible globally in routes
+    app.set("io", io);
+
+    server.listen(PORT, () => {
+      console.log(`🚀 SFCollab Backend server running on port ${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
+      console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+      console.log(`⚠️  Running in MOCK MODE (no database)\n`);
+    });
   }
 })();
 

@@ -6,60 +6,66 @@ const { authValidation } = require('../middleware/validation');
 const { generateTokens } = require('../utils/jwt');
 const { hashPassword, comparePassword } = require('../utils/password');
 const { User, RefreshToken } = require('../models/schemas');
+const dbAdapter = require('../utils/dbAdapter');
 
 const router = express.Router();
 
 const SERVER_URL = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
 const CLIENT_REDIRECT_URL = process.env.CLIENT_REDIRECT_URL || 'http://localhost:5173';
 
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: `${SERVER_URL}/api/auth/google/callback`,
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        const email = Array.isArray(profile.emails) && profile.emails.length > 0 ? profile.emails[0].value : null;
-        const firstName = profile.name?.givenName || profile.displayName || 'User';
-        const lastName = profile.name?.familyName || '';
-        const picture = Array.isArray(profile.photos) && profile.photos.length > 0 ? profile.photos[0].value : null;
-        const googleId = profile.id;
+// Only setup Google OAuth if credentials are available
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: `${SERVER_URL}/api/auth/google/callback`,
+      },
+      async (accessToken, refreshToken, profile, done) => {
+        try {
+          const email = Array.isArray(profile.emails) && profile.emails.length > 0 ? profile.emails[0].value : null;
+          const firstName = profile.name?.givenName || profile.displayName || 'User';
+          const lastName = profile.name?.familyName || '';
+          const picture = Array.isArray(profile.photos) && profile.photos.length > 0 ? profile.photos[0].value : null;
+          const googleId = profile.id;
 
-        if (!email) {
-          return done(new Error('Email not provided by Google'), null);
+          if (!email) {
+            return done(new Error('Email not provided by Google'), null);
+          }
+
+          let userDoc = await User.findOne({ $or: [{ googleId }, { email }] });
+          if (userDoc) {
+            userDoc.googleId = googleId;
+            userDoc.isEmailVerified = true;
+            userDoc.lastLogin = new Date();
+            const newProfile = userDoc.profile?.toObject ? userDoc.profile.toObject() : userDoc.profile || {};
+            if (picture) newProfile.picture = picture;
+            userDoc.profile = newProfile;
+            await userDoc.save();
+          } else {
+            userDoc = new User({
+              firstName,
+              lastName,
+              email,
+              googleId,
+              isEmailVerified: true,
+              profile: { picture, bio: null, company: null, socialLinks: {} },
+              lastLogin: new Date(),
+            });
+            await userDoc.save();
+          }
+
+          return done(null, userDoc);
+        } catch (err) {
+          return done(err, null);
         }
-
-        let userDoc = await User.findOne({ $or: [{ googleId }, { email }] });
-        if (userDoc) {
-          userDoc.googleId = googleId;
-          userDoc.isEmailVerified = true;
-          userDoc.lastLogin = new Date();
-          const newProfile = userDoc.profile?.toObject ? userDoc.profile.toObject() : userDoc.profile || {};
-          if (picture) newProfile.picture = picture;
-          userDoc.profile = newProfile;
-          await userDoc.save();
-        } else {
-          userDoc = new User({
-            firstName,
-            lastName,
-            email,
-            googleId,
-            isEmailVerified: true,
-            profile: { picture, bio: null, company: null, socialLinks: {} },
-            lastLogin: new Date(),
-          });
-          await userDoc.save();
-        }
-
-        return done(null, userDoc);
-      } catch (err) {
-        return done(err, null);
       }
-    }
-  )
-);
+    )
+  );
+} else {
+  console.warn('⚠️  Google OAuth credentials not set. Google login will be disabled.');
+}
 
 /**
  * @route   POST /api/auth/signup
@@ -71,7 +77,7 @@ router.post('/signup', authValidation.signup, async (req, res) => {
     const { firstName, lastName, email, password } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await dbAdapter.findUserByEmail(User, email);
     if (existingUser) {
       return res.status(400).json({
         error: 'User Already Exists',
@@ -83,7 +89,7 @@ router.post('/signup', authValidation.signup, async (req, res) => {
     const hashedPassword = await hashPassword(password);
 
     // Create and save new user
-    const userDoc = new User({
+    const userDoc = await dbAdapter.createUser(User, {
       firstName,
       lastName,
       email,
@@ -91,25 +97,25 @@ router.post('/signup', authValidation.signup, async (req, res) => {
       isEmailVerified: false,
       profile: { picture: null, bio: null, company: null, socialLinks: {} },
     });
-    await userDoc.save();
+
+    const userId = userDoc._id || userDoc.id;
 
     // Generate tokens
     const tokens = generateTokens({
-      userId: userDoc._id.toString(),
+      userId: userId.toString(),
       email: userDoc.email,
       firstName: userDoc.firstName,
       lastName: userDoc.lastName
     });
 
     // Store refresh token
-    await RefreshToken.create({
-      userId: userDoc._id,
-      token: tokens.refreshToken,
-      createdAt: new Date()
-    });
+    await dbAdapter.createRefreshToken(RefreshToken, userId, tokens.refreshToken);
 
     // Remove password from response
-    const user = userDoc.toObject();
+    const user = { ...userDoc };
+    if (user.toObject) {
+      user = user.toObject();
+    }
     delete user.password;
 
     res.status(201).json({
@@ -136,8 +142,8 @@ router.post('/login', authValidation.login, async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user by email
-    const userDoc = await User.findOne({ email });
+    // Find user by email (works with both MongoDB and mock DB)
+    const userDoc = await dbAdapter.findUserByEmail(User, email);
     if (!userDoc) {
       return res.status(401).json({
         error: 'Invalid Credentials',
@@ -154,27 +160,28 @@ router.post('/login', authValidation.login, async (req, res) => {
       });
     }
 
-    // Optionally update lastLogin
-    userDoc.lastLogin = new Date();
-    await userDoc.save();
+    // Get user ID (works with both MongoDB _id and mock id)
+    const userId = userDoc._id || userDoc.id;
+
+    // Update lastLogin
+    await dbAdapter.updateUser(User, userId, { lastLogin: new Date() });
 
     // Generate tokens
     const tokens = generateTokens({
-      userId: userDoc._id.toString(),
+      userId: userId.toString(),
       email: userDoc.email,
       firstName: userDoc.firstName,
       lastName: userDoc.lastName
     });
 
     // Store refresh token
-    await RefreshToken.create({
-      userId: userDoc._id,
-      token: tokens.refreshToken,
-      createdAt: new Date()
-    });
+    await dbAdapter.createRefreshToken(RefreshToken, userId, tokens.refreshToken);
 
     // Remove password from response
-    const user = userDoc.toObject();
+    const user = { ...userDoc };
+    if (user.toObject) {
+      user = user.toObject();
+    }
     delete user.password;
 
     res.json({

@@ -49,8 +49,7 @@ const authValidation = {
       .withMessage('Please provide a valid email address'),
     body('password')
       .isLength({ min: 8 })
-      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
-      .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
+      .withMessage('Password must be at least 8 characters long'),
     handleValidationErrors
   ],
   
