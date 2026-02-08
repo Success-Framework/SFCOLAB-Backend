@@ -1,285 +1,115 @@
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
-const jwt = require("jsonwebtoken");
-const rateLimit = require("express-rate-limit");
-const path = require("path");
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
+const http = require('http');
+require('dotenv').config();
 
-// Load environment variables from .env file
-require("dotenv").config({ path: path.join(__dirname, ".env") });
+// Import routes
+const authRoutes = require('./src/routes/auth');
+const userRoutes = require('./src/routes/users');
+const startupRoutes = require('./src/routes/startups');
+const projectRoutes = require('./src/routes/projects');
+const knowledgeRoutes = require('./src/routes/knowledge');
+const contributorRoutes = require('./src/routes/contributors');
+const fileRoutes = require('./src/routes/files');
+const dashboardRoutes = require('./src/routes/dashboard');
 
-const http = require("http");
-const { Server } = require("socket.io");
-const passport = require("passport");
+// Import middleware
+const { errorHandler } = require('./src/middleware/errorHandler');
+// const { notFound } = require('./src/middleware/notFound');
 
-const { connectMongo } = require("./db/mongoose");
-const authRoutes = require("./routes/auth");
-const ideationRoutes = require("./routes/ideation");
-const startupRoutes = require("./routes/startup");
-const knowledgeRoutes = require("./routes/knowledge");
-const settingsRoutes = require("./routes/settings");
-const { router: notificationRoutes } = require("./routes/notifications");
-const profileRoutes = require("./routes/profile");
+// Import WebSocket service
+const SocketService = require('./src/services/socketService');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.set("trust proxy", 1);
-
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:5175",
-  "http://127.0.0.1:5173",
-  "http://127.0.0.1:5174",
-  "http://127.0.0.1:5175",
-  "https://bright-bunny-ceef3b.netlify.app",
-  "https://sfcollab-phi.vercel.app",
-  "https://yourdomain.com",
-];
-
-const corsOptionsDelegate = (req, callback) => {
-  const requestOrigin = req.header("Origin");
-
-  // Log blocked origins
-  if (requestOrigin && !allowedOrigins.includes(requestOrigin)) {
-    console.warn("Blocked CORS request from:", requestOrigin);
-  }
-
-  // Set CORS options safely - allow undefined origin for development
-  const isAllowed = !requestOrigin || allowedOrigins.includes(requestOrigin);
-
-  const corsOptions = {
-    origin: isAllowed,
-    credentials: isAllowed, 
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-    optionsSuccessStatus: 204,
-  };
-
-  callback(null, corsOptions);
-};
-
-app.use(cors(corsOptionsDelegate));
-app.options("*", cors(corsOptionsDelegate));
+const server = http.createServer(app);
+const PORT = process.env.PORT || 5000;
 
 // Security middleware
-app.use(
-  helmet({
-    crossOriginResourcePolicy: false,
-  })
-);
-
-app.use(passport.initialize());
+app.use(helmet());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true
+}));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
-  message: "Too many requests from this IP, please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
 });
-app.use(limiter);
+app.use('/api/', limiter);
 
 // Body parsing middleware
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static files
-app.use("/uploads", express.static("uploads"));
+// Compression middleware
+app.use(compression());
+
+// Logging middleware
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
 
 // Health check endpoint
-app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "OK",
-    message: "SFCollab Backend is running",
-    timestamp: new Date().toISOString(),
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    message: 'SFCOLAB API is running',
+    timestamp: new Date().toISOString()
   });
 });
 
-// API Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/ideation", ideationRoutes);
-app.use("/api/startup", startupRoutes);
-app.use("/api/knowledge", knowledgeRoutes);
-app.use("/api/settings", settingsRoutes);
-app.use("/api/notifications", notificationRoutes);
-app.use("/api/profile", profileRoutes);
+// API routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/startups', startupRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/knowledge', knowledgeRoutes);
+app.use('/api/contributors', contributorRoutes);
+app.use('/api/files', fileRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
-// 404 handler
-app.use("*", (req, res) => {
-  res.status(404).json({
-    error: "Route not found",
-    message: `Cannot ${req.method} ${req.originalUrl}`,
+// Error handling middleware
+// app.use(notFound);
+app.use(errorHandler);
+
+// Database connection
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/sfcolab', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => {
+  console.log('✅ Connected to MongoDB');
+  
+  // Initialize WebSocket service
+  const socketService = new SocketService(server);
+  global.socketService = socketService; // Make it globally available
+  
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
+    console.log(`🔌 WebSocket enabled on port ${PORT}`);
+  });
+})
+.catch((error) => {
+  console.error('❌ MongoDB connection error:', error);
+  process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  mongoose.connection.close(() => {
+    console.log('MongoDB connection closed');
+    process.exit(0);
   });
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error("Error:", err);
-
-  if (err.name === "ValidationError") {
-    return res.status(400).json({
-      error: "Validation Error",
-      message: err.message,
-      details: err.errors,
-    });
-  }
-
-  if (err.name === "UnauthorizedError") {
-    return res.status(401).json({
-      error: "Unauthorized",
-      message: "Invalid or expired token",
-    });
-  }
-
-  res.status(err.status || 500).json({
-    error: "Internal Server Error",
-    message:
-      process.env.NODE_ENV === "development"
-        ? err.message
-        : "Something went wrong",
-  });
-});
-
-// Connect to MongoDB then start server
-(async () => {
-  const dbAdapter = require('./utils/dbAdapter');
-  try {
-    const conn = await connectMongo();
-    
-    if (conn.mock) {
-      console.log(`⚠️  Running in mock mode (no MongoDB connection)`);
-      dbAdapter.setMongoConnected(false);
-    } else {
-      console.log(`🗄️  MongoDB connected: ${conn.host}`);
-      dbAdapter.setMongoConnected(true);
-    }
-
-    const server = http.createServer(app);
-    const io = new Server(server, {
-      cors: {
-        origin: allowedOrigins,
-        methods: ["GET", "POST"],
-        credentials: true,
-      },
-    });
-
-    // Socket.IO authentication middleware
-    io.use((socket, next) => {
-      const token = socket.handshake.auth?.token;
-
-      if (!token) {
-        return next(new Error("Unauthorized: Token missing"));
-      }
-
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        socket.user = decoded;
-        next();
-      } catch (err) {
-        next(new Error("Unauthorized: Invalid or expired token"));
-      }
-    });
-
-    // Socket.IO setup
-    io.on("connection", (socket) => {
-      console.log(`🟢 User connected: ${socket.user.userId}`);
-
-      // Join user-specific room
-      socket.join(socket.user.userId);
-      console.log(`User ${socket.user.userId} joined their room`);
-
-      // Example: sending notification to specific user
-      socket.on("sendNotification", (data) => {
-        const { receiverId, message } = data;
-        io.to(receiverId).emit("receiveNotification", {
-          message,
-          timestamp: new Date(),
-        });
-      });
-
-      socket.on("disconnect", () => {
-        console.log(`🔴 User disconnected: ${socket.user.userId}`);
-      });
-    });
-
-    // Make `io` accessible globally in routes
-    app.set("io", io);
-
-    server.listen(PORT, () => {
-      console.log(`🚀 SFCollab Backend server running on port ${PORT}`);
-      console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
-      console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-    });
-  } catch (err) {
-    const dbAdapter = require('./utils/dbAdapter');
-    console.error('Failed to connect to MongoDB:', err.message);
-    console.log('⚠️  Attempting to start server in mock mode...\n');
-    
-    // Set mock mode
-    dbAdapter.setMongoConnected(false);
-    
-    // Continue to start server anyway for development
-    const server = http.createServer(app);
-    const io = new Server(server, {
-      cors: {
-        origin: allowedOrigins,
-        methods: ["GET", "POST"],
-        credentials: true,
-      },
-    });
-
-    // Socket.IO authentication middleware
-    io.use((socket, next) => {
-      const token = socket.handshake.auth?.token;
-
-      if (!token) {
-        return next(new Error("Unauthorized: Token missing"));
-      }
-
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        socket.user = decoded;
-        next();
-      } catch (err) {
-        next(new Error("Unauthorized: Invalid or expired token"));
-      }
-    });
-
-    // Socket.IO setup
-    io.on("connection", (socket) => {
-      console.log(`🟢 User connected: ${socket.user.userId}`);
-
-      // Join user-specific room
-      socket.join(socket.user.userId);
-      console.log(`User ${socket.user.userId} joined their room`);
-
-      // Example: sending notification to specific user
-      socket.on("sendNotification", (data) => {
-        const { receiverId, message } = data;
-        io.to(receiverId).emit("receiveNotification", {
-          message,
-          timestamp: new Date(),
-        });
-      });
-
-      socket.on("disconnect", () => {
-        console.log(`🔴 User disconnected: ${socket.user.userId}`);
-      });
-    });
-
-    // Make `io` accessible globally in routes
-    app.set("io", io);
-
-    server.listen(PORT, () => {
-      console.log(`🚀 SFCollab Backend server running on port ${PORT}`);
-      console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
-      console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-      console.log(`⚠️  Running in MOCK MODE (no database)\n`);
-    });
-  }
-})();
-
-module.exports = app;
+module.exports = app; 

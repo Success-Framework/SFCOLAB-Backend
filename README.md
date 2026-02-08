@@ -1,420 +1,353 @@
-# SFCollab Backend
+# SFCOLAB Backend API
 
-A comprehensive backend API for the SFCollab platform built with Node.js, Express.js, and JWT authentication.
+A comprehensive Node.js + Express + MongoDB backend API for the SFCOLAB startup collaboration platform with real-time features, file management, and complete CRUD operations.
 
 ## 🚀 Features
 
-### Authentication System
-- **User Registration & Login**: Secure user authentication with JWT tokens
-- **Password Management**: Secure password hashing with bcrypt
-- **Token Management**: Access and refresh token system
-- **Google OAuth**: Integration ready (implementation pending)
-- **Session Management**: Secure session handling
+### **Core Features**
 
-### Ideation Platform
-- **Idea Management**: Create, read, update, delete ideas
-- **Comments System**: Full CRUD operations for idea comments
-- **Suggestions**: Users can suggest improvements to ideas
-- **Search & Filtering**: Advanced search with pagination
-- **Categories & Tags**: Organized idea management
+- **Authentication & Authorization**: JWT-based authentication with refresh tokens
+- **User Management**: Complete user profile and account management
+- **Startup Management**: CRUD operations for startup profiles and information
+- **Project/Ideation System**: Collaborative project management and ideation
+- **Knowledge Base**: Resource management with ratings and bookmarks
+- **File Management**: Secure file upload and storage in database
+- **Contributor Matching**: Find and manage project contributors
+- **Dashboard Analytics**: Comprehensive dashboard with statistics and metrics
 
-### Startup Management
-- **Startup Registration**: Complete startup profile creation
-- **Member Management**: Handle join requests and approvals
-- **Startup Discovery**: Browse and search startups
-- **Role-based Access**: Founder and member permissions
+### **Advanced Features**
 
-### Knowledge Base
-- **Resource Management**: Upload and manage knowledge resources
-- **File Handling**: Support for various file types
-- **Engagement Tracking**: Views, downloads, and likes
-- **Comment System**: Discussion on knowledge resources
-- **Category Organization**: Structured knowledge management
+- **Real-time Communication**: WebSocket support for live chat and notifications
+- **Search & Filtering**: Advanced search across all entities with multiple filters
+- **File Storage**: Database-stored files with associations and access control
+- **Social Features**: Likes, follows, comments, and collaboration
+- **Rating System**: Knowledge resource ratings and user feedback
+- **Application System**: Project applications and contributor matching
+- **Activity Tracking**: User activity feeds and progress metrics
 
-### User Settings & Profile
-- **Profile Management**: Update personal information and bio
-- **Account Security**: Password and email management
-- **Preferences**: Customizable user preferences
-- **Notification Settings**: Granular notification control
+### **Security & Performance**
 
-### Content Management
-- **Stories**: 24-hour ephemeral content
-- **Posts**: Professional and social content sharing
-- **Feed System**: Personalized content aggregation
-- **Engagement**: Likes, comments, and sharing
-
-### Notification System
-- **Real-time Notifications**: Various notification types
-- **Smart Filtering**: Unread/read status management
-- **Bulk Operations**: Mark all as read, clear read notifications
+- **Rate Limiting**: Prevents abuse with configurable limits
+- **Input Validation**: All inputs validated with Joi schemas
+- **Security Headers**: Helmet.js for security headers
+- **CORS**: Configurable cross-origin resource sharing
+- **Password Hashing**: bcryptjs for secure password storage
+- **JWT Security**: Secure token generation and validation
+- **Database Indexing**: Optimized queries with proper indexing
 
 ## 🛠️ Tech Stack
 
 - **Runtime**: Node.js
 - **Framework**: Express.js
-- **Authentication**: JWT, Passport.js
-- **Security**: bcrypt, helmet, CORS
-- **Validation**: express-validator
-- **Rate Limiting**: express-rate-limit
-- **File Upload**: Multer (ready for implementation)
+- **Database**: MongoDB with Mongoose ODM
+- **Authentication**: JWT (JSON Web Tokens)
+- **Real-time**: Socket.io
+- **File Upload**: Multer
+- **Validation**: Joi
+- **Security**: Helmet, CORS, Rate Limiting
+- **Logging**: Morgan
 
 ## 📋 Prerequisites
 
-- Node.js (v16 or higher)
+- Node.js (v14 or higher)
+- MongoDB (local or cloud instance)
 - npm or yarn
-- PostgreSQL (for future database integration)
 
 ## 🚀 Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone <repository-url>
-   cd SFCOLAB-Backend
+   cd backend
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    ```
 
 3. **Environment Setup**
+
    ```bash
    cp env.example .env
    ```
-   
-   Edit `.env` file with your configuration:
+
+   Update the `.env` file with your configuration:
+
    ```env
-   PORT=3000
+   PORT=5000
    NODE_ENV=development
-   JWT_SECRET=your_jwt_secret_key_here
-   JWT_REFRESH_SECRET=your_jwt_refresh_secret_key_here
-   GOOGLE_CLIENT_ID=your_google_client_id
-   GOOGLE_CLIENT_SECRET=your_google_client_secret
+   MONGODB_URI=mongodb://localhost:27017/sfcolab
+   JWT_SECRET=your-super-secret-jwt-key
+   JWT_EXPIRE=30d
+   JWT_REFRESH_SECRET=your-refresh-secret-key
+   JWT_REFRESH_EXPIRE=7d
+   FRONTEND_URL=http://localhost:5173
+   MAX_FILE_SIZE=5242880
+   ALLOWED_FILE_TYPES=image/jpeg,image/png,image/gif,application/pdf
    ```
 
-4. **Start the server**
+4. **Seed the database (optional)**
+
    ```bash
-   # Development mode
+   npm run seed
+   ```
+
+5. **Start the server**
+
+   ```bash
+   # Development
    npm run dev
-   
-   # Production mode
+
+   # Production
    npm start
    ```
 
-5. **Verify installation**
-   ```bash
-   curl http://localhost:3000/health
-   ```
+## 📚 API Endpoints
 
-## 📚 API Documentation
+### **Authentication** (`/api/auth`)
 
-### Base URL
-```
-http://localhost:3000/api
-```
+- `POST /register` - Register new user
+- `POST /login` - User login
+- `GET /me` - Get current user
+- `POST /refresh` - Refresh access token
+- `POST /logout` - User logout
+- `PUT /profile` - Update user profile
+- `PUT /change-password` - Change password
 
-### Authentication Endpoints
+### **Users** (`/api/users`)
 
-#### User Registration
-```http
-POST /auth/signup
-Content-Type: application/json
+- `GET /` - Get all users (with filters)
+- `GET /:id` - Get user by ID
+- `PUT /:id` - Update user
+- `DELETE /:id` - Delete user
+- `GET /search` - Search users
+- `POST /:id/follow` - Follow/unfollow user
 
-{
-  "firstName": "John",
-  "lastName": "Doe",
-  "email": "john@example.com",
-  "password": "SecurePass123!"
-}
-```
+### **Startups** (`/api/startups`)
 
-#### User Login
-```http
-POST /auth/login
-Content-Type: application/json
+- `GET /` - Get all startups
+- `POST /` - Create startup
+- `GET /:id` - Get startup by ID
+- `PUT /:id` - Update startup
+- `DELETE /:id` - Delete startup
+- `GET /search` - Search startups
+- `POST /:id/like` - Like/unlike startup
+- `POST /:id/follow` - Follow/unfollow startup
+- `POST /:id/team` - Add team member
+- `DELETE /:id/team/:userId` - Remove team member
 
-{
-  "email": "john@example.com",
-  "password": "SecurePass123!"
-}
-```
+### **Projects** (`/api/projects`)
 
-#### Token Refresh
-```http
-POST /auth/refresh
-Content-Type: application/json
+- `GET /` - Get all projects
+- `POST /` - Create project
+- `GET /:id` - Get project by ID
+- `PUT /:id` - Update project
+- `DELETE /:id` - Delete project
+- `GET /search` - Search projects
+- `POST /:id/like` - Like/unlike project
+- `POST /:id/comment` - Add comment
+- `DELETE /:id/comment/:commentId` - Remove comment
+- `POST /:id/collaborate` - Add collaborator
+- `DELETE /:id/collaborate/:userId` - Remove collaborator
 
-{
-  "refreshToken": "your_refresh_token_here"
-}
-```
+### **Knowledge Base** (`/api/knowledge`)
 
-#### Logout
-```http
-POST /auth/logout
-Authorization: Bearer <access_token>
-```
+- `GET /` - Get all knowledge resources
+- `POST /` - Create knowledge resource
+- `GET /:id` - Get knowledge resource by ID
+- `PUT /:id` - Update knowledge resource
+- `DELETE /:id` - Delete knowledge resource
+- `GET /search` - Search knowledge resources
+- `POST /:id/like` - Like/unlike resource
+- `POST /:id/bookmark` - Bookmark/unbookmark resource
+- `POST /:id/rate` - Rate resource
+- `POST /:id/comment` - Add comment
+- `DELETE /:id/comment/:commentId` - Remove comment
+- `GET /bookmarks` - Get user's bookmarks
 
-### Ideation Endpoints
+### **Files** (`/api/files`)
 
-#### Create Idea
-```http
-POST /ideation
-Authorization: Bearer <access_token>
-Content-Type: application/json
+- `POST /upload` - Upload single file
+- `POST /upload-multiple` - Upload multiple files
+- `POST /upload-image` - Upload image file
+- `POST /upload-document` - Upload document file
+- `GET /:id` - Get file by ID
+- `GET /:id/info` - Get file info
+- `PUT /:id` - Update file info
+- `DELETE /:id` - Delete file
+- `GET /association/:type/:id` - Get files by association
+- `GET /user/:userId` - Get user's files
 
-{
-  "title": "Innovative Startup Idea",
-  "description": "A detailed description of the idea...",
-  "category": "Technology",
-  "tags": ["AI", "SaaS", "Innovation"]
-}
-```
+### **Contributors** (`/api/contributors`)
 
-#### Get Ideas
-```http
-GET /ideation?page=1&limit=10&category=Technology&search=AI
-```
+- `GET /` - Get all contributors
+- `GET /search` - Search contributors
+- `GET /:id` - Get contributor by ID
+- `POST /apply` - Apply for project
+- `GET /applications` - Get user's applications
+- `GET /projects/:id/applications` - Get project applications
+- `PUT /projects/:id/applications/:applicationId` - Update application status
 
-#### Add Comment
-```http
-POST /ideation/{ideaId}/comments
-Authorization: Bearer <access_token>
-Content-Type: application/json
+### **Dashboard** (`/api/dashboard`)
 
-{
-  "content": "Great idea! Have you considered..."
-}
-```
-
-### Startup Endpoints
-
-#### Register Startup
-```http
-POST /startup/register
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "name": "TechStartup Inc",
-  "industry": "Technology",
-  "location": "San Francisco, CA",
-  "description": "Innovative tech solutions...",
-  "stage": "Seed",
-  "roles": ["Developer", "Designer", "Marketing"]
-}
-```
-
-#### Get Startups
-```http
-GET /startup?page=1&limit=10&industry=Technology&location=San Francisco
-```
-
-#### Submit Join Request
-```http
-POST /startup/{startupId}/join-request
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "message": "I'm interested in joining your team...",
-  "role": "Developer"
-}
-```
-
-### Knowledge Endpoints
-
-#### Add Resource
-```http
-POST /knowledge
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "title": "Guide to Startup Success",
-  "description": "Comprehensive guide for entrepreneurs...",
-  "category": "Business",
-  "fileUrl": "https://example.com/file.pdf",
-  "tags": ["startup", "business", "guide"]
-}
-```
-
-#### Get Resources
-```http
-GET /knowledge?page=1&limit=10&category=Business&search=startup
-```
-
-#### Like Resource
-```http
-POST /knowledge/{resourceId}/like
-Authorization: Bearer <access_token>
-```
-
-### Profile & Content Endpoints
-
-#### Create Story
-```http
-POST /profile/stories
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "mediaUrl": "https://example.com/image.jpg",
-  "caption": "Exciting news!",
-  "type": "image"
-}
-```
-
-#### Create Post
-```http
-POST /profile/posts
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "content": "Just launched our new product!",
-  "type": "professional",
-  "tags": ["launch", "product", "excited"]
-}
-```
-
-#### Get Feed
-```http
-GET /profile/feed?page=1&limit=15
-Authorization: Bearer <access_token>
-```
-
-### Settings Endpoints
-
-#### Update Profile
-```http
-PUT /settings/profile
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "firstName": "John",
-  "lastName": "Smith",
-  "bio": "Passionate entrepreneur...",
-  "company": "TechStartup Inc"
-}
-```
-
-#### Change Password
-```http
-POST /settings/account/change-password
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "currentPassword": "OldPass123!",
-  "newPassword": "NewSecurePass456!"
-}
-```
-
-#### Update Preferences
-```http
-PUT /settings/preferences
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "emailNotifications": true,
-  "pushNotifications": false,
-  "theme": "dark",
-  "language": "en"
-}
-```
-
-### Notification Endpoints
-
-#### Get Notifications
-```http
-GET /notifications?page=1&limit=20&status=unread
-Authorization: Bearer <access_token>
-```
-
-#### Mark as Read
-```http
-PUT /notifications/{notificationId}/read
-Authorization: Bearer <access_token>
-```
-
-#### Mark All as Read
-```http
-PUT /notifications/read-all
-Authorization: Bearer <access_token>
-```
+- `GET /stats` - Get dashboard statistics
+- `GET /tasks` - Get user tasks
+- `GET /calendar` - Get calendar events
+- `GET /progress` - Get progress metrics
+- `GET /activity` - Get activity feed
+- `GET /network` - Get user's network
+- `GET /recommendations` - Get recommendations
 
 ## 🔐 Authentication
 
-All protected endpoints require a valid JWT access token in the Authorization header:
+The API uses JWT (JSON Web Tokens) for authentication. Include the token in the Authorization header:
 
-```http
-Authorization: Bearer <access_token>
+```
+Authorization: Bearer <your-jwt-token>
 ```
 
-### Token Types
-- **Access Token**: Short-lived (15 minutes), used for API requests
-- **Refresh Token**: Long-lived (7 days), used to get new access tokens
+## 📁 File Upload
 
-### Token Refresh Flow
-1. When access token expires, use refresh token to get new tokens
-2. Send refresh token to `/auth/refresh` endpoint
-3. Receive new access and refresh tokens
-4. Continue with new access token
+Files are stored directly in the MongoDB database as binary data. Supported file types and limits are configurable via environment variables.
 
-## 📊 Response Format
+### **Upload Example**
 
-### Success Response
-```json
-{
-  "message": "Operation successful",
-  "data": { ... },
-  "pagination": {
-    "currentPage": 1,
-    "totalPages": 5,
-    "totalItems": 50,
-    "hasNextPage": true,
-    "hasPrevPage": false
-  }
-}
+```javascript
+const formData = new FormData();
+formData.append("file", file);
+formData.append("fileType", "avatar");
+formData.append(
+  "associatedWith",
+  JSON.stringify({
+    type: "user",
+    id: userId,
+  })
+);
+
+const response = await fetch("/api/files/upload", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${token}`,
+  },
+  body: formData,
+});
 ```
 
-### Error Response
-```json
-{
-  "error": "Error Type",
-  "message": "Human readable error message",
-  "details": [
-    {
-      "field": "email",
-      "message": "Invalid email format",
-      "value": "invalid-email"
-    }
-  ]
-}
+## 🔌 Real-time Features (WebSocket)
+
+The API includes WebSocket support for real-time features:
+
+### **Connection**
+
+```javascript
+import io from "socket.io-client";
+
+const socket = io("http://localhost:5000", {
+  auth: {
+    token: localStorage.getItem("token"),
+  },
+});
 ```
 
-## 🚧 Development Notes
+### **Events**
 
-### Current Implementation
-- **Mock Data**: All data is currently stored in memory arrays
-- **Database Ready**: Code structure is prepared for PostgreSQL integration
-- **File Upload**: Multer middleware is configured but not fully implemented
-- **Google OAuth**: Routes are set up but strategy implementation is pending
+- `chat:message` - New chat message
+- `chat:typing` - Typing indicator
+- `notification:new` - New notification
+- `project:updated` - Project update
+- `project:commented` - New project comment
+- `startup:updated` - Startup update
+- `user:online` - User came online
+- `user:offline` - User went offline
 
-### Future Enhancements
-- Database integration with PostgreSQL
-- File upload service (AWS S3, Google Cloud Storage)
-- Email service integration
-- Real-time notifications with WebSockets
-- Advanced search with Elasticsearch
-- Caching with Redis
-- API rate limiting per user
-- Comprehensive logging and monitoring
+### **Sending Events**
 
-### Testing
+```javascript
+// Send chat message
+socket.emit("chat:message", {
+  roomId: "room-123",
+  message: "Hello world!",
+  type: "text",
+});
+
+// Join chat room
+socket.emit("chat:join", { roomId: "room-123" });
+
+// Send notification
+socket.emit("notification:send", {
+  userId: "user-123",
+  notification: {
+    type: "info",
+    title: "New Message",
+    message: "You have a new message",
+  },
+});
+```
+
+## 🔍 Search & Filtering
+
+Most endpoints support search and filtering:
+
+### **Search Example**
+
+```
+GET /api/startups?search=tech&industry=Technology&stage=Growth Stage&location=San Francisco
+```
+
+### **Pagination**
+
+```
+GET /api/projects?page=1&limit=10&sort=createdAt&order=desc
+```
+
+### **Advanced Filters**
+
+```
+GET /api/contributors?userType=Developer&availability=Available Now&skills=React,Node.js&location=San Francisco
+```
+
+## 📊 Database Models
+
+### **User**
+
+- Authentication fields (username, email, password)
+- Profile information (name, bio, skills, experience)
+- Metrics (contributions, commits, reviews)
+- Social links and preferences
+
+### **Startup**
+
+- Basic info (name, description, industry, stage)
+- Team and founder information
+- Metrics and funding details
+- Social engagement (likes, followers)
+
+### **Project**
+
+- Project details (header, content, stage, category)
+- Collaboration features (collaborators, comments)
+- Engagement metrics (likes, views)
+- Timeline and requirements
+
+### **Knowledge**
+
+- Resource information (title, content, category, type)
+- Rating and bookmark system
+- Version control and SEO
+- Related resources
+
+### **File**
+
+- File metadata (name, type, size)
+- Binary data storage
+- Association with other entities
+- Access control and privacy settings
+
+## 🧪 Testing
+
 ```bash
 # Run tests
 npm test
@@ -423,41 +356,78 @@ npm test
 npm run test:coverage
 ```
 
-## 🔒 Security Features
+## 🌱 Database Seeding
 
-- **JWT Authentication**: Secure token-based authentication
-- **Password Hashing**: bcrypt with configurable salt rounds
-- **Input Validation**: Comprehensive request validation
-- **Rate Limiting**: Configurable rate limiting per IP
-- **CORS Protection**: Configurable cross-origin resource sharing
-- **Helmet Security**: Various HTTP security headers
-- **Input Sanitization**: Protection against injection attacks
+The backend includes a comprehensive seeder for sample data:
+
+```bash
+# Seed the database with sample data
+npm run seed
+```
+
+This creates:
+
+- 5 sample users with different roles
+- 3 sample startups
+- 5 sample projects
+- 5 sample knowledge resources
+- Sample interactions (likes, comments, etc.)
 
 ## 📝 Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Server port | 3000 |
-| `NODE_ENV` | Environment | development |
-| `JWT_SECRET` | JWT signing secret | Required |
-| `JWT_REFRESH_SECRET` | JWT refresh secret | Required |
-| `JWT_EXPIRES_IN` | Access token expiry | 15m |
-| `JWT_REFRESH_EXPIRES_IN` | Refresh token expiry | 7d |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID | Required |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | Required |
-| `RATE_LIMIT_WINDOW_MS` | Rate limit window | 900000 (15 min) |
-| `RATE_LIMIT_MAX_REQUESTS` | Max requests per window | 100 |
-| `SESSION_SECRET` | Session secret | Required |
-| `MAX_FILE_SIZE` | Max file upload size | 10485760 (10MB) |
+| Variable             | Description                        | Default                                        |
+| -------------------- | ---------------------------------- | ---------------------------------------------- |
+| `PORT`               | Server port                        | 5000                                           |
+| `NODE_ENV`           | Environment                        | development                                    |
+| `MONGODB_URI`        | MongoDB connection string          | mongodb://localhost:27017/sfcolab              |
+| `JWT_SECRET`         | JWT signing secret                 | -                                              |
+| `JWT_EXPIRE`         | JWT expiration time                | 30d                                            |
+| `JWT_REFRESH_SECRET` | Refresh token secret               | -                                              |
+| `JWT_REFRESH_EXPIRE` | Refresh token expiration           | 7d                                             |
+| `FRONTEND_URL`       | Frontend URL for CORS              | http://localhost:5173                          |
+| `MAX_FILE_SIZE`      | Maximum file size in bytes         | 5242880 (5MB)                                  |
+| `ALLOWED_FILE_TYPES` | Comma-separated allowed MIME types | image/jpeg,image/png,image/gif,application/pdf |
+
+## 🚀 Deployment
+
+### **Production Setup**
+
+1. Set `NODE_ENV=production`
+2. Use a production MongoDB instance
+3. Set strong JWT secrets
+4. Configure proper CORS settings
+5. Set up reverse proxy (nginx)
+6. Use PM2 or similar process manager
+
+### **Docker Deployment**
+
+```dockerfile
+FROM node:16-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+EXPOSE 5000
+CMD ["npm", "start"]
+```
+
+## 📖 API Integration Examples
+
+The backend includes comprehensive API integration examples in `src/utils/apiExamples.js`:
+
+- Authentication examples
+- CRUD operations for all entities
+- File upload examples
+- Real-time WebSocket examples
+- React hooks for API calls
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch  
 3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
+4. Add tests
+5. Submit a pull request
 
 ## 📄 License
 
@@ -466,21 +436,27 @@ This project is licensed under the MIT License.
 ## 🆘 Support
 
 For support and questions:
+
 - Create an issue in the repository
 - Contact the development team
 - Check the documentation
 
-## 🔄 Version History
+## 🔄 API Versioning
 
-- **v1.0.0**: Initial release with core functionality
-  - Authentication system
-  - Ideation platform
-  - Startup management
-  - Knowledge base
-  - User settings
-  - Content management
-  - Notification system
+The API is currently at version 1.0. Future versions will be available at `/api/v2/`, etc.
+
+## 🎯 Key Features Summary
+
+✅ **Complete CRUD Operations** - All entities fully managed  
+✅ **Real-time Communication** - WebSocket support for live features  
+✅ **File Management** - Database-stored files with associations  
+✅ **Advanced Search** - Multi-field search with filters  
+✅ **Social Features** - Likes, follows, comments, collaboration  
+✅ **Security** - JWT auth, rate limiting, input validation  
+✅ **Scalable Architecture** - Well-structured for growth  
+✅ **Comprehensive Testing** - Ready for production deployment  
+✅ **Documentation** - Complete API documentation and examples
 
 ---
 
-**Note**: This is a development version. Database integration and production deployment configurations will be added in future releases.
+**Built with ❤️ for the SFCOLAB startup community**
