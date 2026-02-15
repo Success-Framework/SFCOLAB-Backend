@@ -141,9 +141,12 @@ router.post('/signup', authValidation.signup, async (req, res) => {
 router.post('/login', authValidation.login, async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log(`[LOGIN] Email: ${email}`);
 
     // Find user by email (works with both MongoDB and mock DB)
     const userDoc = await dbAdapter.findUserByEmail(User, email);
+    console.log(`[LOGIN] User found: ${!!userDoc}`);
+    
     if (!userDoc) {
       return res.status(401).json({
         error: 'Invalid Credentials',
@@ -152,7 +155,20 @@ router.post('/login', authValidation.login, async (req, res) => {
     }
 
     // Verify password
-    const isPasswordValid = await comparePassword(password, userDoc.password);
+    let isPasswordValid = false;
+    try {
+      console.log(`[LOGIN] Comparing password... stored: ${!!userDoc.password}, input: ${!!password}`);
+      isPasswordValid = await comparePassword(password, userDoc.password);
+      console.log(`[LOGIN] Password valid: ${isPasswordValid}`);
+    } catch (passwordError) {
+      console.error('[LOGIN] Password comparison error:', passwordError.message);
+      // If password comparison fails, reject login
+      return res.status(401).json({
+        error: 'Invalid Credentials',
+        message: 'Email or password is incorrect'
+      });
+    }
+
     if (!isPasswordValid) {
       return res.status(401).json({
         error: 'Invalid Credentials',
