@@ -20,6 +20,7 @@ const knowledgeRoutes = require("./routes/knowledge");
 const settingsRoutes = require("./routes/settings");
 const { router: notificationRoutes } = require("./routes/notifications");
 const profileRoutes = require("./routes/profile");
+const userSocialRoutes = require("./routes/userSocial");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -106,6 +107,7 @@ app.use("/api/knowledge", knowledgeRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/api/user-social", userSocialRoutes);
 
 // 404 handler
 app.use("*", (req, res) => {
